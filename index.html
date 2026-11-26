@@ -3404,8 +3404,24 @@ function saveOrder(order){
       showPaySuccess(order);
     }).catch(function(e){
       console.error('Firestore error:',e);
-      notifyWhatsApp(order);
-      showPaySuccess(order); /* still show success */
+      /* Reintento una vez más */
+      setTimeout(function(){
+        db.collection('dinamit_orders').add(order).then(function(doc){
+          order.id=doc.id;
+          notifyWhatsApp(order);
+          showPaySuccess(order);
+        }).catch(function(e2){
+          console.error('Firestore reintento fallido:',e2);
+          /* Guardar en localStorage como respaldo */
+          var pending=JSON.parse(localStorage.getItem('dinamit_pending')||'[]');
+          order.id='local_'+Date.now();
+          pending.push(order);
+          localStorage.setItem('dinamit_pending',JSON.stringify(pending));
+          notifyWhatsApp(order);
+          showPaySuccess(order);
+          /* Alertar al admin por WhatsApp de todas formas */
+        });
+      }, 2000);
     });
   } else {
     /* offline fallback: save to localStorage */
@@ -3413,6 +3429,7 @@ function saveOrder(order){
     order.id='local_'+Date.now();
     pending.push(order);
     localStorage.setItem('dinamit_pending',JSON.stringify(pending));
+    notifyWhatsApp(order);
     showPaySuccess(order);
   }
 }

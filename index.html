@@ -4417,6 +4417,8 @@ function confirmOrder(idOrIdx,idx){
       .update({status:'entregado',confirmedAt:Date.now()})
       .then(function(){
         renderAdminOrders();
+        /* Refrescar stats también */
+        if(typeof loadAdminDashboard==='function'){ loadAdminDashboard(); }
         /* Disparar generación automática del informe con Claude */
         deliverInformeAutomatico(id, o);
       })

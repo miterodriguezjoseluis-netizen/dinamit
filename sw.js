@@ -1,7 +1,7 @@
-// DINAMIT Service Worker v6.0
+// DINAMIT Service Worker v8.0
 // Estrategia: Network First con fallback a cache para iOS Safari PWA
 
-const CACHE_NAME = 'dinamit-v6';
+const CACHE_NAME = 'dinamit-v8';
 const OFFLINE_URL = '/';
 
 // Recursos a pre-cachear para funcionamiento offline básico

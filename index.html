@@ -3323,8 +3323,8 @@ function handlePay(){
   /* Gather info from the modal */
   var r=_moOpenRow;
   if(!r){alert('Error: no hay empresa seleccionada.');return;}
-  var nm=rv(r,'nm')||'Sin nombre';
-  var rucN=rv(r,'ru')||'';
+  var nm=(Array.isArray(r)?r[3]:rv(r,'nm'))||'Sin nombre';
+  var rucN=(Array.isArray(r)?String(r[1]||''):rv(r,'ru'))||'';
   var email=document.getElementById('pay-email-input')?document.getElementById('pay-email-input').value.trim():'';
   var method=document.getElementById('pay-method-sel')?document.getElementById('pay-method-sel').value:'transferencia';
   if(!email||!email.includes('@')){alert('Por favor ingresa tu email para recibir el informe.');return;}

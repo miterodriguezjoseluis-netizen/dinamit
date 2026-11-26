@@ -3015,18 +3015,16 @@ function guardedCmpAB(row){
 (function(){
   var VISIT_KEY='dinamit_visits';
   var LOCAL_BASE=2727;
-  // Mostrar inmediatamente desde localStorage mientras carga Firebase
+  // Mostrar desde localStorage mientras carga Firebase (no mostrar LOCAL_BASE fijo)
   var localStored=parseInt(localStorage.getItem(VISIT_KEY)||'0',10);
   if(!localStored||localStored<LOCAL_BASE) localStored=LOCAL_BASE;
   var SESSION_KEY='dinamit_sess_'+new Date().toDateString();
   var isNewSession=!sessionStorage.getItem(SESSION_KEY);
   if(isNewSession) {
     sessionStorage.setItem(SESSION_KEY,'1');
-    localStored++;
-    localStorage.setItem(VISIT_KEY,localStored);
   }
   var el=document.getElementById('visit-counter');
-  if(el) el.textContent=localStored.toLocaleString('es-EC');
+  if(el && localStored > LOCAL_BASE) el.textContent=localStored.toLocaleString('es-EC');
 
   // Sincronizar con Firestore cuando esté disponible
   function syncWithFirestore(){
@@ -3044,24 +3042,32 @@ function guardedCmpAB(row){
         return tx.get(docRef).then(function(doc){
           var current=doc.exists?(doc.data().total||LOCAL_BASE):LOCAL_BASE;
           var newTotal=current+1;
-          tx.set(docRef,{total:newTotal});  /* set completo — más confiable que merge en transacciones */
+          tx.set(docRef,{total:newTotal});
           return newTotal;
         });
       }).then(function(newVal){
-        // Actualizar localStorage y el display con el valor real de Firestore
         localStorage.setItem(VISIT_KEY,newVal);
         var el2=document.getElementById('visit-counter');
         if(el2) el2.textContent=newVal.toLocaleString('es-EC');
+        console.log('[DINAMIT] Visita registrada. Total:', newVal);
       }).catch(function(e){
-        console.warn('[DINAMIT] Visitas error:',e);
-        /* fallback: usar el valor local ya mostrado */
+        console.warn('[DINAMIT] Visitas tx error:',e);
+        // fallback: leer sin incrementar
+        docRef.get().then(function(doc){
+          if(doc.exists){
+            var n=doc.data().total||localStored;
+            localStorage.setItem(VISIT_KEY,n);
+            var el2=document.getElementById('visit-counter');
+            if(el2) el2.textContent=n.toLocaleString('es-EC');
+          }
+        }).catch(function(){});
       });
     } else {
-      // Solo leer el valor actual
+      // Solo leer el valor actual de Firestore
       docRef.get().then(function(doc){
         if(doc.exists){
           var n=doc.data().total||localStored;
-          localStorage.setItem(VISIT_KEY,n);
+          if(n>localStored) localStorage.setItem(VISIT_KEY,n);
           var el2=document.getElementById('visit-counter');
           if(el2) el2.textContent=n.toLocaleString('es-EC');
         }
@@ -3322,8 +3328,34 @@ function handlePay(){
   var email=document.getElementById('pay-email-input')?document.getElementById('pay-email-input').value.trim():'';
   var method=document.getElementById('pay-method-sel')?document.getElementById('pay-method-sel').value:'transferencia';
   if(!email||!email.includes('@')){alert('Por favor ingresa tu email para recibir el informe.');return;}
-  var order={ruc:rucN,empresa:nm,email:email,method:method,ts:Date.now(),status:'pendiente',year:year};
-  saveOrder(order);
+
+  /* Verificar si ya existe un pedido pendiente con este email */
+  var btn=document.querySelector('[onclick="handlePay()"]');
+  if(btn){ btn.disabled=true; btn.textContent='Verificando...'; }
+
+  function proceedWithOrder(){
+    var order={ruc:rucN,empresa:nm,email:email,method:method,ts:Date.now(),status:'pendiente',year:year};
+    if(btn){ btn.disabled=false; btn.textContent='Confirmar pago'; }
+    saveOrder(order);
+  }
+
+  if(typeof firebase!=='undefined'&&firebase.apps&&firebase.apps.length){
+    firebase.firestore().collection('dinamit_orders')
+      .where('email','==',email)
+      .where('status','==','pendiente')
+      .get().then(function(snap){
+        if(!snap.empty){
+          if(btn){ btn.disabled=false; btn.textContent='Confirmar pago'; }
+          alert('⚠️ Ya tienes un pedido pendiente con este email.\n\nEnvía tu comprobante de pago por WhatsApp al 0980379867 y en breve te confirmamos tu informe.');
+          return;
+        }
+        proceedWithOrder();
+      }).catch(function(){
+        proceedWithOrder(); // si falla la verificación, continuar normalmente
+      });
+  } else {
+    proceedWithOrder();
+  }
 }
 
 function notifyWhatsApp(order){

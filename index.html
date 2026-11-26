@@ -4395,8 +4395,15 @@ function renderAdminOrders(){
   }).join('');
 }
 
-function confirmOrder(idx){
-  var o=_adminOrders[idx];
+function confirmOrder(idOrIdx,idx){
+  var o;
+  if(typeof idOrIdx==='number'||(!isNaN(Number(idOrIdx))&&typeof idOrIdx!=='string')){
+    o=_adminOrders[idOrIdx];
+  } else {
+    // idOrIdx is the Firestore doc id; idx is the array position
+    if(idx!==undefined){ o=_adminOrders[idx]; }
+    if(!o){ o=_adminOrders.find(function(x){return x.id===idOrIdx;}); }
+  }
   if(!o){ renderAdminOrders(); return; }
   var id=o.id;
   /* Store unlock immediately */
@@ -4500,7 +4507,7 @@ function deliverInformeAutomatico(orderId, order){
       +'<div style="padding:0 32px 32px;font-size:13.5px;line-height:1.75;color:#333">'+analisisHTML+'</div>'
       +'<div style="background:#0C1A2E;border-radius:12px;padding:22px;text-align:center;margin:0 32px 28px">'
       +'<div style="color:#fff;font-size:14px;font-weight:700;margin-bottom:8px">📊 Accede al análisis interactivo completo</div>'
-      +'<a href="https://capable-chimera-ec79bf.netlify.app" style="display:inline-block;background:#1D9E75;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px">Abrir DINAMIT →</a>'
+      +'<a href="https://miterodriguezjoseluis-netizen.github.io/dinamit/" style="display:inline-block;background:#1D9E75;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px">Abrir DINAMIT →</a>'
       +'</div>'
       +'<div style="padding:16px 32px;background:#f9f9f9;border-top:1px solid #eee;font-size:11px;color:#999;text-align:center">'
       +'¿Consultas? WhatsApp: <strong>0980379867</strong> · Ing. José Mite Rodríguez CPA<br>'
@@ -4537,8 +4544,14 @@ function deliverInformeAutomatico(orderId, order){
   });
 }
 
-function rejectOrder(idx){
-  var o=_adminOrders[idx];
+function rejectOrder(idOrIdx,idx){
+  var o;
+  if(typeof idOrIdx==='number'||(!isNaN(Number(idOrIdx))&&typeof idOrIdx!=='string')){
+    o=_adminOrders[idOrIdx];
+  } else {
+    if(idx!==undefined){ o=_adminOrders[idx]; }
+    if(!o){ o=_adminOrders.find(function(x){return x.id===idOrIdx;}); }
+  }
   if(!o) return;
   if(!confirm('¿Rechazar orden de '+o.empresa+'?')) return;
   o.status='rechazado';

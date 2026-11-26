@@ -3340,23 +3340,7 @@ function handlePay(){
     saveOrder(order);
   }
 
-  if(typeof firebase!=='undefined'&&firebase.apps&&firebase.apps.length){
-    firebase.firestore().collection('dinamit_orders')
-      .where('email','==',email)
-      .where('status','==','pendiente')
-      .get().then(function(snap){
-        if(!snap.empty){
-          if(btn){ btn.disabled=false; btn.textContent='Confirmar pago'; }
-          alert('⚠️ Ya tienes un pedido pendiente con este email.\n\nEnvía tu comprobante de pago por WhatsApp al 0980379867 y en breve te confirmamos tu informe.');
-          return;
-        }
-        proceedWithOrder();
-      }).catch(function(){
-        proceedWithOrder(); // si falla la verificación, continuar normalmente
-      });
-  } else {
-    proceedWithOrder();
-  }
+  proceedWithOrder();
 }
 
 function notifyWhatsApp(order){

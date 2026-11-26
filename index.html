@@ -1277,7 +1277,8 @@ function prog(p,l){document.getElementById('pf').style.width=p+'%';document.getE
 async function preloadData(){
   var ids=["_bb25c_0", "_bb25c_1", "_bb25c_2", "_bb25c_3", "_bb25c_4", "_bb25c_5", "_bbn25", "_bbe25", "_bbs25", "_bb24c_0", "_bb24c_1", "_bb24c_2", "_bb24c_3", "_bb24c_4", "_bb24c_5", "_bbn24", "_bbe24", "_bbs24"];
   var fetches=ids.map(function(id){
-    return fetch('/data/'+id+'.txt').then(function(r){
+    var filename='d'+id.slice(1)+'.txt'; // remove leading _ and prefix with d
+    return fetch('data/'+filename).then(function(r){
       if(!r.ok) throw new Error('HTTP '+r.status+' for '+id);
       return r.text();
     }).then(function(txt){

@@ -4418,9 +4418,21 @@ function confirmOrder(idOrIdx,idx){
   if(typeof idOrIdx==='number'||(!isNaN(Number(idOrIdx))&&typeof idOrIdx!=='string')){
     o=_adminOrders[idOrIdx];
   } else {
-    // idOrIdx is the Firestore doc id; idx is the array position
-    if(idx!==undefined){ o=_adminOrders[idx]; }
+    if(idx!==undefined && idx>=0){ o=_adminOrders[idx]; }
     if(!o){ o=_adminOrders.find(function(x){return x.id===idOrIdx;}); }
+  }
+  /* Si no está en el array local, buscar en Firestore directamente */
+  if(!o && typeof idOrIdx==='string' && idOrIdx.length>5){
+    firebase.firestore().collection('dinamit_orders').doc(idOrIdx).get().then(function(doc){
+      if(doc.exists){
+        var ord=Object.assign({id:doc.id},doc.data());
+        _adminOrders.push(ord);
+        confirmOrder(idOrIdx, _adminOrders.length-1);
+      } else {
+        renderAdminOrders();
+      }
+    });
+    return;
   }
   if(!o){ renderAdminOrders(); return; }
   var id=o.id;
@@ -4569,8 +4581,18 @@ function rejectOrder(idOrIdx,idx){
   if(typeof idOrIdx==='number'||(!isNaN(Number(idOrIdx))&&typeof idOrIdx!=='string')){
     o=_adminOrders[idOrIdx];
   } else {
-    if(idx!==undefined){ o=_adminOrders[idx]; }
+    if(idx!==undefined && idx>=0){ o=_adminOrders[idx]; }
     if(!o){ o=_adminOrders.find(function(x){return x.id===idOrIdx;}); }
+  }
+  if(!o && typeof idOrIdx==='string' && idOrIdx.length>5){
+    firebase.firestore().collection('dinamit_orders').doc(idOrIdx).get().then(function(doc){
+      if(doc.exists){
+        var ord=Object.assign({id:doc.id},doc.data());
+        _adminOrders.push(ord);
+        rejectOrder(idOrIdx, _adminOrders.length-1);
+      }
+    });
+    return;
   }
   if(!o) return;
   if(!confirm('¿Rechazar orden de '+o.empresa+'?')) return;

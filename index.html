@@ -3198,16 +3198,13 @@ function _showIOSInstallModal(){
 }
 
 
-// ── SERVICE WORKER (iOS Safari PWA) ──────────────────────────────
+// ── SERVICE WORKER: desregistrar todos para evitar caché viejo ────
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', function() {
-    navigator.serviceWorker.register('/sw.js', { scope: '/' })
-      .then(function(reg) {
-        console.log('[DINAMIT] SW registrado:', reg.scope);
-      })
-      .catch(function(err) {
-        console.warn('[DINAMIT] SW error:', err);
-      });
+  navigator.serviceWorker.getRegistrations().then(function(regs) {
+    regs.forEach(function(r) { r.unregister(); });
+  });
+  caches.keys().then(function(keys) {
+    keys.forEach(function(k) { caches.delete(k); });
   });
 }
 

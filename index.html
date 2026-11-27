@@ -1474,8 +1474,8 @@ async function preloadData(){
       +'<\/div>';
 
     /* ── CONSTRUIR HTML FINAL ── */
-    var esJSON=JSON.stringify(analisis);
-    var bloqJSON=JSON.stringify(bloques);
+    var esJSON=JSON.stringify(analisis||'');
+    var bloqJSON=JSON.stringify(bloques||[]);
 
     var html='<!DOCTYPE html><html lang="es"><head>'
       +'<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
@@ -1565,9 +1565,10 @@ async function preloadData(){
       +'<\/div>'
       +'<\/div>' /* /container */
 
+      +'<script id="data-an" type="application/json">'+esJSON+'<\/script>'
       +'<script>'
-      +'var _bl='+bloqJSON+';'
-      +'var _an='+esJSON+';'
+      +'var _an=JSON.parse(document.getElementById("data-an").textContent||"{}");'
+      +'if(typeof _an!=="string") _an=String(_an||"");'
       +'var _ICONS=["🏦","📊","🚦","🌐","📋","💡"];'
       +'var _LABS=["1. ESF","2. ERI","3. Ratios","4. Sectorial","5. NIIF","6. Recomendaciones"];'
       +'function parseLine(l){'
@@ -1634,13 +1635,24 @@ async function preloadData(){
       +'var _secs=splitSections(_an);'
       +'function showBlk(i){'
       +'document.querySelectorAll(".tab").forEach(function(b,j){b.classList.toggle("on",i===j);});'
-      +'document.getElementById("sec-out").innerHTML=parseTbl(_secs[i]||"");'
+      +'var contenido=(_secs&&_secs[i]&&_secs[i].trim())?_secs[i]:_an;'
+      +'document.getElementById("sec-out").innerHTML=parseTbl(contenido);'
       +'window.scrollTo({top:document.getElementById("sec-out").getBoundingClientRect().top+window.scrollY-100,behavior:"smooth"});'
       +'}'
       +'(function init(){'
       +'var wrap=document.getElementById("tabs-wrap");'
+      /* Si _an está vacío o muy corto, mostrar aviso */
+      +'if(!_an||_an.trim().length<50){'
+      +'document.getElementById("sec-out").innerHTML="<p style=\'color:#888;padding:20px\'>No hay contenido disponible en este informe.</p>";'
+      +'return;'
+      +'}'
+      /* Si no se pudo dividir en secciones, mostrar todo en una pestaña */
       +'var total=Math.min(_secs.length,6);'
-      +'if(total<=1){document.getElementById("sec-out").innerHTML=parseTbl(_an);return;}'
+      +'if(total<=1){'
+      +'document.getElementById("sec-out").innerHTML=parseTbl(_an);'
+      +'wrap.innerHTML="<button class=\'tab on\'>📄 Informe Completo<\/button>";'
+      +'return;'
+      +'}'
       +'for(var i=0;i<total;i++){'
       +'(function(idx){'
       +'var b=document.createElement("button");b.className="tab"+(idx===0?" on":"");'
@@ -1651,6 +1663,8 @@ async function preloadData(){
       +'}'
       +'showBlk(0);'
       +'})();'
+      /* Debug: log en consola para diagnosticar */
+      +'console.log("[DINAMIT] _an length:",_an?_an.length:0,"_secs:",_secs?_secs.length:0);'
       +'<\/script>'
       +'<\/body><\/html>';
 

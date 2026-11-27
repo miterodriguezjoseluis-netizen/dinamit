@@ -4447,14 +4447,11 @@ function deliverInformeAutomatico(orderId, order){
     +'Formato profesional en español, datos específicos del sector ecuatoriano, '
     +'menciona Superintendencia de Compañías Ecuador. 600-800 palabras.';
 
-  /* Llamar Claude API directamente */
-  fetch('https://api.anthropic.com/v1/messages',{
+  /* Llamar Claude API vía Cloudflare Worker proxy (evita CORS) */
+  fetch('https://dinamit-claude-proxy.miterodriguezjoseluis.workers.dev',{
     method:'POST',
     headers:{
-      'Content-Type':'application/json',
-      'x-api-key': CLAUDE_API_KEY,
-      'anthropic-version':'2023-06-01',
-      'anthropic-dangerous-allow-browser':'true'
+      'Content-Type':'application/json'
     },
     body:JSON.stringify({
       model:'claude-haiku-4-5-20251001',
@@ -4954,13 +4951,10 @@ Responde SOLO con el JSON, sin texto adicional.`;
   if(status) status.innerHTML='🤖 Claude IA analizando... <span style="color:#fbbf24">Generando proyecciones NIC 1 y NIIF 18</span>';
 
   try{
-    var resp=await fetch('https://api.anthropic.com/v1/messages',{
+    var resp=await fetch('https://dinamit-claude-proxy.miterodriguezjoseluis.workers.dev',{
       method:'POST',
       headers:{
-        'Content-Type':'application/json',
-        'x-api-key':CLAUDE_API_KEY,
-        'anthropic-version':'2023-06-01',
-        'anthropic-dangerous-direct-browser-use':'true'
+        'Content-Type':'application/json'
       },
       body:JSON.stringify({
         model:'claude-haiku-4-5-20251001',

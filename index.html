@@ -4154,6 +4154,7 @@ function showAdminOrders(){
     +'</div>'
     +'<div id="admin-tab-content"></div>';
   loadAdminDashboard();
+  loadAdminOrders(); /* pre-load _adminOrders so Confirmar works from Stats tab */
 }
 
 function showAdminTab(tab){
@@ -4293,10 +4294,7 @@ function _mini(lbl,val){
 }
 
 function loadAdminOrders(){
-  var listEl=document.getElementById('admin-orders-list');
-  if(!listEl) return;
-
-  /* Load from Firestore */
+  /* Load from Firestore — always, regardless of active tab */
   if(typeof firebase!=='undefined'&&firebase.apps&&firebase.apps.length){
     firebase.firestore().collection('dinamit_orders')
       .orderBy('ts','desc')
@@ -4308,7 +4306,11 @@ function loadAdminOrders(){
           var d=doc.data();
           _adminOrders.push(Object.assign({id:doc.id},d));
         });
+        console.log('[DINAMIT] Órdenes cargadas en _adminOrders:',_adminOrders.length);
         renderAdminOrders();
+        /* also refresh stats panel if visible */
+        var statsEl=document.getElementById('admin-stats-panel');
+        if(statsEl&&typeof renderAdminDashboard==='function') renderAdminDashboard(statsEl,_adminOrders);
       })
       .catch(function(e){
         var listEl2=document.getElementById('admin-tab-content');

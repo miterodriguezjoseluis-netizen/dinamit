@@ -1375,15 +1375,16 @@ async function preloadData(){
       return '<tr><td colspan="2" style="background:#0C1A2E;color:#1D9E75;font-weight:800;font-size:13px;padding:10px 12px;letter-spacing:.5px">'+title+'</td></tr>';
     }
 
-    /* ── datos ESF ── */
+    /* ── datos ESF — forzar Number() por si Firestore serializa distinto ── */
+    function $n(v){ var n=Number(v); return isNaN(n)?0:n; }
     var e=esData;
-    var c1=e.c1||0, c101=e.c101||0, c102=e.c102||0;
-    var c10101=e.c10101||0, c10103=e.c10103||0, c10201=e.c10201||0;
-    var c2=e.c2||0, c201=e.c201||0, c202=e.c202||0;
-    var c20103=e.c20103||0, c20104=e.c20104||0, c20203=e.c20203||0;
-    var c3=e.c3||0, c30101=e.c30101||0;
-    var c401=e.c401||0, c501=e.c501||0, c502=e.c502||0;
-    var gb=e.gb||0, c600=e.c600||0, c607=e.c607||0;
+    var c1=$n(e.c1), c101=$n(e.c101), c102=$n(e.c102);
+    var c10101=$n(e.c10101), c10103=$n(e.c10103), c10201=$n(e.c10201);
+    var c2=$n(e.c2), c201=$n(e.c201), c202=$n(e.c202);
+    var c20103=$n(e.c20103), c20104=$n(e.c20104), c20203=$n(e.c20203);
+    var c3=$n(e.c3), c30101=$n(e.c30101);
+    var c401=$n(e.c401), c501=$n(e.c501), c502=$n(e.c502);
+    var gb=$n(e.gb), c600=$n(e.c600), c607=$n(e.c607);
 
     /* ── Cálculos ERI ── */
     var ebit=gb-c502;
@@ -1445,14 +1446,15 @@ async function preloadData(){
 
     /* ── datos año anterior ── */
     var esData2=data.esData2||null;
-    var showCmp=(plan==='$10'||plan==='10')&&esData2;
+    /* Mostrar comparativo siempre que haya datos del año anterior (plan $1 y $10) */
+    var showCmp=!!esData2;
 
     /* ══════════════════════════════════
        CONSTRUIR HTML COMPLETO DEL INFORME
     ══════════════════════════════════ */
     var ICONS=['🏦','📈','🚦','🌐','📋','💡'];
-    var LABS =['1. ESF','2. ERI','3. Ratios','4. Sectorial','5. NIIF','6. Recomendaciones'];
-    if(!showCmp) LABS.splice(3,1), ICONS.splice(3,1); /* quitar Sectorial en plan $1 */
+    var LABS =['1. ESF','2. ERI','3. Ratios','4. 2024 vs 2025','5. NIIF','6. Recomendaciones'];
+    if(!showCmp) LABS.splice(3,1), ICONS.splice(3,1); /* quitar comparativo si no hay datos */
 
     var linkInforme='https://miterodriguezjoseluis-netizen.github.io/dinamit/?informe='+(id||'');
 
@@ -1602,24 +1604,50 @@ async function preloadData(){
     });
     html+='</tbody></table></div>';
 
-    /* ── SEC 3 (plan $10): Sectorial / o NIIF para $1 ── */
+    /* ── SEC 3: Comparativo 2024 vs 2025 (siempre que haya datos año anterior) ── */
     var secIdx=3;
     if(showCmp){
       var e2=esData2;
-      var c401b=e2.c401||0, c607b=e2.c607||0, c1b=e2.c1||0;
-      var liq2=e2.c201>0?(e2.c101||0)/(e2.c201||1):0;
+      var c401b=$n(e2.c401), c607b=$n(e2.c607), c1b=$n(e2.c1);
+      var c101b=$n(e2.c101), c201b=$n(e2.c201), c3b=$n(e2.c3);
+      var liq2=c201b>0?c101b/c201b:0;
+      var mgn2=c401b>0?c607b/c401b:0;
+      var añoAnt2=String(Number(año)-1);
       html+='<div class="sec" id="sec'+secIdx+'">'
-        +'<div class="sec-title">🌐 COMPARATIVO SECTORIAL Y 2024 vs 2025</div>'
+        +'<div class="sec-title">↔ COMPARATIVO '+añoAnt2+' vs '+año+'</div>'
         +'<table><tbody>'
-        +tblHdr('COMPARATIVO AÑO ANTERIOR vs AÑO ACTUAL')
-        +'<tr><td style="padding:8px 10px;font-size:12.5px;font-weight:700">Indicador</td>'
-        +'<td style="padding:8px 10px;font-size:12.5px;font-weight:700;text-align:right">'+(Number(año)-1)+'</td>'
-        +'<td style="padding:8px 10px;font-size:12.5px;font-weight:700;text-align:right">'+año+'</td></tr>'
-        +'<tr class="ratio-row"><td class="ratio-nm">Ingresos Totales</td><td style="text-align:right;padding:8px 10px">'+$f(c401b)+'</td><td style="text-align:right;padding:8px 10px">'+$f(c401)+'</td></tr>'
-        +'<tr class="ratio-row"><td class="ratio-nm">Utilidad Neta</td><td style="text-align:right;padding:8px 10px">'+$f(c607b)+'</td><td style="text-align:right;padding:8px 10px">'+$f(utilNeta)+'</td></tr>'
-        +'<tr class="ratio-row"><td class="ratio-nm">Total Activos</td><td style="text-align:right;padding:8px 10px">'+$f(c1b)+'</td><td style="text-align:right;padding:8px 10px">'+$f(c1)+'</td></tr>'
-        +'<tr class="ratio-row"><td class="ratio-nm">Liquidez Corriente</td><td style="text-align:right;padding:8px 10px">'+$x(liq2)+'</td><td style="text-align:right;padding:8px 10px">'+$x(liq)+'</td></tr>'
-        +'</tbody></table></div>';
+        +'<tr style="background:#0C1A2E"><td style="padding:8px 10px;font-size:12px;color:#1D9E75;font-weight:700">Indicador</td>'
+        +'<td style="padding:8px 10px;font-size:12px;color:#1D9E75;font-weight:700;text-align:right">'+añoAnt2+'</td>'
+        +'<td style="padding:8px 10px;font-size:12px;color:#1D9E75;font-weight:700;text-align:right">'+año+'</td>'
+        +'<td style="padding:8px 10px;font-size:12px;color:#1D9E75;font-weight:700;text-align:right">Variación</td></tr>'
+        +'<tr class="ratio-row"><td class="ratio-nm">💰 Ingresos Totales</td>'
+        +'<td style="text-align:right;padding:8px 10px">'+$f(c401b)+'</td>'
+        +'<td style="text-align:right;padding:8px 10px;font-weight:700">'+$f(c401)+'</td>'
+        +'<td style="text-align:right;padding:8px 10px;color:'+(c401>=c401b?'#1D9E75':'#EF4444')+';font-weight:700">'+(c401b>0?((c401-c401b)/c401b*100).toFixed(1)+'%':'—')+'</td></tr>'
+        +'<tr class="ratio-row"><td class="ratio-nm">📈 Utilidad Neta</td>'
+        +'<td style="text-align:right;padding:8px 10px">'+$f(c607b)+'</td>'
+        +'<td style="text-align:right;padding:8px 10px;font-weight:700">'+$f(utilNeta)+'</td>'
+        +'<td style="text-align:right;padding:8px 10px;color:'+(utilNeta>=c607b?'#1D9E75':'#EF4444')+';font-weight:700">'+(c607b>0?((utilNeta-c607b)/c607b*100).toFixed(1)+'%':'—')+'</td></tr>'
+        +'<tr class="ratio-row"><td class="ratio-nm">🏦 Total Activos</td>'
+        +'<td style="text-align:right;padding:8px 10px">'+$f(c1b)+'</td>'
+        +'<td style="text-align:right;padding:8px 10px;font-weight:700">'+$f(c1)+'</td>'
+        +'<td style="text-align:right;padding:8px 10px;color:'+(c1>=c1b?'#1D9E75':'#EF4444')+';font-weight:700">'+(c1b>0?((c1-c1b)/c1b*100).toFixed(1)+'%':'—')+'</td></tr>'
+        +'<tr class="ratio-row"><td class="ratio-nm">💚 Patrimonio</td>'
+        +'<td style="text-align:right;padding:8px 10px">'+$f(c3b)+'</td>'
+        +'<td style="text-align:right;padding:8px 10px;font-weight:700">'+$f(c3)+'</td>'
+        +'<td style="text-align:right;padding:8px 10px;color:'+(c3>=c3b?'#1D9E75':'#EF4444')+';font-weight:700">'+(c3b>0?((c3-c3b)/c3b*100).toFixed(1)+'%':'—')+'</td></tr>'
+        +'<tr class="ratio-row"><td class="ratio-nm">🚦 Liquidez Corriente</td>'
+        +'<td style="text-align:right;padding:8px 10px">'+$x(liq2)+'</td>'
+        +'<td style="text-align:right;padding:8px 10px;font-weight:700">'+$x(liq)+'</td>'
+        +'<td style="text-align:right;padding:8px 10px;color:'+(liq>=liq2?'#1D9E75':'#EF4444')+';font-weight:700">'+(liq2>0?((liq-liq2)/liq2*100).toFixed(1)+'%':'—')+'</td></tr>'
+        +'<tr class="ratio-row"><td class="ratio-nm">📊 Margen Neto</td>'
+        +'<td style="text-align:right;padding:8px 10px">'+$p(mgn2)+'</td>'
+        +'<td style="text-align:right;padding:8px 10px;font-weight:700">'+$p(mgn)+'</td>'
+        +'<td style="text-align:right;padding:8px 10px;color:'+(mgn>=mgn2?'#1D9E75':'#EF4444')+';font-weight:700">'+(Math.abs(mgn2)>0.001?((mgn-mgn2)*100).toFixed(1)+' pp':'—')+'</td></tr>'
+        +'</tbody></table>'
+        +'<div style="margin-top:12px;padding:12px;background:#f0faf6;border-radius:8px;font-size:11.5px;color:#555">'
+        +'<strong style="color:#0C1A2E">📋 Fuente:</strong> Catálogo oficial Superintendencia de Compañías, Valores y Seguros del Ecuador — datos auditados '+añoAnt2+' y '+año+'.'
+        +'</div></div>';
       secIdx++;
     }
 
@@ -4851,14 +4879,13 @@ function deliverInformeAutomatico(orderId, order){
   /* ── Buscar empresa en base de datos DINAMIT por RUC ── */
   function normalizeRuc(r){ return String(r||'').replace(/\D/g,'').padStart(13,'0'); }
   var rucN=normalizeRuc(order.ruc);
-  var rowAño=D[año]?bs(D[año],rucN):null;
-  var rowAnt=D[añoAnt]?bs(D[añoAnt],rucN):null;
 
-  /* Si no encuentra por año actual, busca en cualquier año cargado */
-  if(!rowAño){
-    ['2025','2024'].forEach(function(y){
-      if(!rowAño&&D[y]) rowAño=bs(D[y],rucN);
-    });
+  function buscarRow(ruc,y){ return D[y]?bs(D[y],ruc):null; }
+  var rowAño=buscarRow(rucN,año)||buscarRow(rucN,'2025')||buscarRow(rucN,'2024');
+  var rowAnt=buscarRow(rucN,añoAnt);
+  /* Si año encontrado difiere del solicitado, ajustar */
+  if(rowAño&&!buscarRow(rucN,año)){
+    ['2025','2024'].forEach(function(y){ if(!rowAnt&&y!==String(rowAño&&rowAño[F.ex])) rowAnt=buscarRow(rucN,y); });
   }
 
   /* ── Función para extraer datos estructurados de un row ── */

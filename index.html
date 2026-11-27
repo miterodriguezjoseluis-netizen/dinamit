@@ -4260,9 +4260,9 @@ function renderAdminDashboard(el,all){
           +'<div style="color:#fff;font-size:11px;font-weight:700">'+o.empresa+'</div>'
           +'<div style="color:rgba(255,255,255,.5);font-size:9px">'+o.ruc+' · '+(o.method||'transferencia')+' · '+(o.ts?new Date(o.ts).toLocaleString('es-EC'):'')+'</div>'
           +'<div style="display:flex;gap:5px;margin-top:7px;flex-wrap:wrap">'
-          +'<button onclick="confirmOrder('+i+')" style="background:#1D9E75;color:#fff;border:none;border-radius:5px;padding:5px 9px;font-size:9px;font-weight:700;cursor:pointer">✅ Confirmar</button>'
+          +'<button onclick="confirmOrderById(\''+o.id+'\')" style="background:#1D9E75;color:#fff;border:none;border-radius:5px;padding:5px 9px;font-size:9px;font-weight:700;cursor:pointer">✅ Confirmar</button>'
           +'<a href="https://wa.me/593'+String(o.tel||'').replace(/^0/,'')+'" target="_blank" style="background:#25D366;color:#fff;border-radius:5px;padding:5px 9px;font-size:9px;font-weight:700;text-decoration:none">📱 '+o.tel+'</a>'
-          +'<button onclick="rejectOrder('+i+')" style="background:#2a1515;color:#ff5555;border:1px solid #3a1515;border-radius:5px;padding:5px 9px;font-size:9px;cursor:pointer">✗</button>'
+          +'<button onclick="rejectOrderById(\''+o.id+'\')" style="background:#2a1515;color:#ff5555;border:1px solid #3a1515;border-radius:5px;padding:5px 9px;font-size:9px;cursor:pointer">✗</button>'
           +'</div></div>';
       }).join('')
     )

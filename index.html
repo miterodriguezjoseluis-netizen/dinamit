@@ -4767,32 +4767,29 @@ function deliverInformeAutomatico(orderId, order){
       +'Generado el '+fecha+' · DINAMIT · RUC 0924158656001'
       +'</div></div></body></html>';
 
-    /* Agregar link al inicio del informe */
-    var linkTexto='\n\n🔗 VER INFORME COMPLETO + DESCARGA PDF:\n'+linkInforme+'\n\n';
-    var analisisConLink=linkTexto+analisis;
+    /* Dividir informe en mitades para EmailJS (límite por variable) */
+    var mitad=Math.floor(analisis.length/2);
+    /* Cortar en salto de línea más cercano a la mitad */
+    var corte=analisis.lastIndexOf('\n', mitad);
+    if(corte<100) corte=mitad;
+    var parte1=analisis.substring(0,corte).trim();
+    var parte2=analisis.substring(corte).trim();
 
-    /* Dividir informe en secciones para evitar límite EmailJS */
-    var partes=analisisConLink.split(/(?=═{3,})/);
-    var s1=partes[0]||'';
-    var s2=partes[1]||'';
-    var s3=partes[2]||'';
-    var s4=partes[3]||'';
-    var s5=(partes[4]||'')+(partes[5]||'')+(partes[6]||'');
-
-    /* Enviar via EmailJS con informe dividido en secciones */
+    /* Enviar via EmailJS */
     return emailjs.send('service_c6ew6z4','template_wvkmk7h',{
-      to_email:  order.email,
-      to_name:   order.empresa,
-      empresa:   order.empresa,
-      ruc:       order.ruc,
+      to_email:     order.email,
+      to_name:      order.empresa,
+      empresa:      order.empresa,
+      ruc:          order.ruc,
       tipo_informe: 'Estados Financieros NIIF '+año,
-      name:      order.empresa,
-      email:     order.email,
-      s1:        s1.trim(),
-      s2:        s2.trim(),
-      s3:        s3.trim(),
-      s4:        s4.trim(),
-      s5:        s5.trim()
+      name:         order.empresa,
+      email:        order.email,
+      link_informe: linkInforme,
+      s1:           parte1,
+      s2:           parte2,
+      s3:           '',
+      s4:           '',
+      s5:           ''
     });
   })
   .then(function(){

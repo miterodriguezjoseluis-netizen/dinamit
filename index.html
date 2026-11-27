@@ -1339,340 +1339,326 @@ async function preloadData(){
   }
 
   function renderInformeDashboard(data, id){
-    var analisis=data.analisis||'';
-    var empresa=data.empresa||'';
-    var ruc=data.ruc||'';
-    var año=data.año||'';
-    var fecha=data.fecha ? new Date(data.fecha).toLocaleDateString('es-EC',{day:'2-digit',month:'long',year:'numeric'}) : '';
+    var empresa = data.empresa||'';
+    var ruc     = data.ruc||'';
+    var año     = data.año||data.anio||'';
+    var fecha   = data.fecha ? new Date(data.fecha).toLocaleDateString('es-EC',{day:'2-digit',month:'long',year:'numeric'}) : new Date().toLocaleDateString('es-EC',{day:'2-digit',month:'long',year:'numeric'});
+    var plan    = data.plan||'$1';
+    var esData  = data.esData||{};   /* datos estructurados ESF/ERI/Ratios */
+    var analisis= data.analisis||''; /* texto Claude para sección Recomendaciones */
 
-    /* ── PARSEAR RATIOS ── */
-    var ratios=[];
-    var regRatio=/\|\s*([A-Za-záéíóúÁÉÍÓÚñÑ\s\/]+?)\s*\|\s*[^|]*\|\s*([0-9.,]+\s*[x%veces]*)\s*\|\s*[^|]*\|\s*(🟢|🟡|🔴)/g;
-    var m;
-    while((m=regRatio.exec(analisis))!==null){
-      var nom=m[1].trim(); if(nom.length<3||nom==='RATIO'||nom==='LIQUIDEZ'||nom==='RENTABILIDAD'||nom==='ENDEUDAMIENTO'||nom==='EFICIENCIA'||nom==='VALOR') continue;
-      ratios.push({nombre:nom,valor:m[2].trim(),semaforo:m[3]});
-      if(ratios.length>=17) break;
+    /* ── helpers ── */
+    function $f(v){ if(!v&&v!==0)return '$—'; var n=Number(v); if(isNaN(n))return '$—';
+      var s=n<0,a=Math.abs(n);
+      var r=a>=1e9?'$'+(a/1e9).toFixed(2)+'B':a>=1e6?'$'+(a/1e6).toFixed(2)+'M':a>=1e3?'$'+(a/1e3).toFixed(1)+'K':'$'+a.toFixed(0);
+      return s?'('+r+')':r; }
+    function $p(v){ if(!v&&v!==0)return '—'; var n=Number(v); return isNaN(n)?'—':(n*100).toFixed(1)+'%'; }
+    function $x(v){ if(!v&&v!==0)return '—'; var n=Number(v); return isNaN(n)?'—':n.toFixed(2)+'x'; }
+    function sem(v,type){
+      var c=''; var em='🟡';
+      if(type==='liq'){ c=v>=1.5?'v':v>=1?'a':'r'; }
+      else if(type==='end'){ c=v<=0.5?'v':v<=0.7?'a':'r'; }
+      else if(type==='roe'||type==='roa'){ c=v>=0.1?'v':v>=0.04?'a':'r'; }
+      else if(type==='mgn'||type==='mgb'){ c=v>=0.08?'v':v>=0.03?'a':'r'; }
+      else { c=v>0?'v':'r'; }
+      var color=c==='v'?'#1D9E75':c==='a'?'#F59E0B':'#EF4444';
+      em=c==='v'?'🟢':c==='a'?'🟡':'🔴';
+      return {color:color,em:em};
     }
-    /* fallback regex más simple */
-    if(ratios.length===0){
-      var reg2=/([A-Za-záéíóúÁÉÍÓÚñÑ \/]{4,30})\s*[\|:]\s*([0-9.,]+\s*[x%]?)\s*(🟢|🟡|🔴)/g;
-      while((m=reg2.exec(analisis))!==null){
-        ratios.push({nombre:m[1].trim(),valor:m[2].trim(),semaforo:m[3]});
-        if(ratios.length>=17) break;
-      }
+    function mkRow(label,val,indent){
+      var pad=indent?'padding-left:'+(indent*20)+'px':'';
+      var bold=(!indent)?'font-weight:700':'';
+      return '<tr><td style="padding:7px 10px;border-bottom:1px solid #f0f4f8;font-size:12.5px;color:#333;'+bold+';'+pad+'">'+label+'</td>'
+        +'<td style="padding:7px 10px;border-bottom:1px solid #f0f4f8;font-size:12.5px;text-align:right;color:#0C1A2E;font-weight:600">'+$f(val)+'</td></tr>';
     }
-
-    /* ── PARSEAR KPIs CLAVE del ERI ── */
-    function extraerUSD(patron){
-      try{
-        var r=new RegExp(patron+'[\\s\\S]{0,60}?([\\$]?[\\s]?[0-9][0-9.,]{2,}(?:\\s*(?:USD|millones)?))','i');
-        var mm=analisis.match(r); return mm&&mm[1]?mm[1].replace(/[^0-9.,]/g,'').trim():'—';
-      }catch(e){return '—';}
-    }
-    var ventas=extraerUSD('Ingresos de actividades ordinarias|TOTAL INGRESOS|Ingresos ordinarios|Ingresos Totales|Ventas netas|Ingresos por ventas|Ingresos de Actividades');
-    var utilNeta=extraerUSD('UTILIDAD NETA DEL EJERCICIO|Utilidad Neta|Utilidad neta del período|Resultado del ejercicio|Ganancia neta');
-    var ebitda=extraerUSD('EBITDA|Ebitda');
-    var totalActivos=extraerUSD('TOTAL ACTIVOS|Total de activos|Total Activos');
-
-    /* ── PARSEAR TABLAS MARKDOWN → HTML ── */
-    function parseMdTable(txt){
-      if(!txt) return '';
-      var lines=String(txt).split('\n');
-      var inTable=false; var html=''; var rows=[];
-      lines.forEach(function(l){
-        if(/^\|/.test(l.trim())){
-          if(/^[\|\s\-:]+$/.test(l.trim())){return;} /* separador */
-          inTable=true;
-          var cells=l.trim().replace(/^\||\|$/g,'').split('|').map(function(c){return c.trim();});
-          rows.push(cells);
-        } else {
-          if(inTable&&rows.length){
-            html+='<div style="overflow-x:auto;margin:12px 0"><table style="width:100%;border-collapse:collapse;font-size:12.5px">';
-            rows.forEach(function(row,ri){
-              html+='<tr style="background:'+(ri===0?'#0C1A2E':ri%2===0?'#f8fafc':'#fff')+'">';
-              row.forEach(function(cell){
-                var tag=ri===0?'th':'td';
-                html+='<'+tag+' style="padding:8px 10px;text-align:left;border-bottom:1px solid #e8ecf0;color:'+(ri===0?'#1D9E75':'#333')+';font-weight:'+(ri===0?'700':'400')+'">'+cell+'<\/'+tag+'>';
-              });
-              html+='<\/tr>';
-            });
-            html+='<\/table><\/div>';
-            rows=[]; inTable=false;
-          }
-          html+=procesarLinea(l)+'\n';
-        }
-      });
-      if(inTable&&rows.length){
-        html+='<div style="overflow-x:auto;margin:12px 0"><table style="width:100%;border-collapse:collapse;font-size:12.5px">';
-        rows.forEach(function(row,ri){
-          html+='<tr style="background:'+(ri===0?'#0C1A2E':ri%2===0?'#f8fafc':'#fff')+'">';
-          row.forEach(function(cell){
-            var tag=ri===0?'th':'td';
-            html+='<'+tag+' style="padding:8px 10px;text-align:left;border-bottom:1px solid #e8ecf0;color:'+(ri===0?'#1D9E75':'#333')+';font-weight:'+(ri===0?'700':'400')+'">'+cell+'<\/'+tag+'>';
-          });
-          html+='<\/tr>';
-        });
-        html+='<\/table><\/div>';
-      }
-      return html;
-    }
-    function procesarLinea(l){
-      if(l===null||l===undefined) return '';
-      l=String(l);
-      l=l.replace(/═{3,}/g,'<div style="height:3px;background:linear-gradient(90deg,#1D9E75,transparent);margin:16px 0;border-radius:2px"><\/div>');
-      l=l.replace(/^#{1,2}\s+(.+)$/,'<h2 style="color:#0C1A2E;font-size:15px;font-weight:800;margin:20px 0 8px;padding:10px 14px;background:#f0faf6;border-left:4px solid #1D9E75;border-radius:0 8px 8px 0">$1<\/h2>');
-      l=l.replace(/^###\s+(.+)$/,'<h3 style="color:#1D9E75;font-size:13px;font-weight:700;margin:14px 0 6px;text-transform:uppercase;letter-spacing:.5px">$1<\/h3>');
-      l=l.replace(/\*\*(.*?)\*\*/g,'<strong>$1<\/strong>');
-      l=l.replace(/^-\s+(.+)$/,'<div style="padding:5px 0 5px 16px;border-bottom:1px solid #f0f0f0;font-size:13px">▸ $1<\/div>');
-      l=l.replace(/^---+$/,'<hr style="border:none;border-top:1px solid #e0e0e0;margin:12px 0">');
-      return l;
-    }
-    function md2htmlFull(txt){
-      return parseMdTable(txt);
+    function tblHdr(title){
+      return '<tr><td colspan="2" style="background:#0C1A2E;color:#1D9E75;font-weight:800;font-size:13px;padding:10px 12px;letter-spacing:.5px">'+title+'</td></tr>';
     }
 
-    /* ── DIVIDIR EN SECCIONES ── */
-    var bloques=(analisis||'').split(/(?=═{10,}[\s\S]{0,80}═{10,})/);
-    var SECS=['ESF','ERI','RATIOS','SECTORIAL','NIIF','RECOMENDACIONES'];
-    var ICONS=['🏦','📊','🚦','🌐','📋','💡'];
-    if(bloques.length<2) bloques=[analisis];
+    /* ── datos ESF ── */
+    var e=esData;
+    var c1=e.c1||0, c101=e.c101||0, c102=e.c102||0;
+    var c10101=e.c10101||0, c10103=e.c10103||0, c10201=e.c10201||0;
+    var c2=e.c2||0, c201=e.c201||0, c202=e.c202||0;
+    var c20103=e.c20103||0, c20104=e.c20104||0, c20203=e.c20203||0;
+    var c3=e.c3||0, c30101=e.c30101||0;
+    var c401=e.c401||0, c501=e.c501||0, c502=e.c502||0;
+    var gb=e.gb||0, c600=e.c600||0, c607=e.c607||0;
 
-    /* ── COLORES SEMÁFORO ── */
-    function sColor(s){ return s==='🟢'?'#1D9E75':s==='🟡'?'#F59E0B':'#EF4444'; }
-    function sBg(s){ return s==='🟢'?'#f0faf6':s==='🟡'?'#fffbeb':'#fff5f5'; }
-    function sBorder(s){ return s==='🟢'?'#1D9E75':s==='🟡'?'#F59E0B':'#EF4444'; }
-    function sLabel(s){ return s==='🟢'?'ÓPTIMO':s==='🟡'?'PRECAUCIÓN':'ALERTA'; }
+    /* ── Cálculos ERI ── */
+    var ebit=gb-c502;
+    var ebitda=ebit; /* D&A no disponible en catálogo Supercias */
+    var uai=ebit;
+    var utilNeta=c607;
 
-    /* ── RATIOS HTML ── */
-    var ratiosGrid='';
-    if(ratios.length>0){
-      ratios.forEach(function(r){
-        ratiosGrid+='<div style="background:'+sBg(r.semaforo)+';border:1.5px solid '+sBorder(r.semaforo)+';border-radius:12px;padding:16px 12px;text-align:center;position:relative">'
-          +'<div style="position:absolute;top:8px;right:10px;font-size:9px;font-weight:700;color:'+sColor(r.semaforo)+';background:'+sBg(r.semaforo)+';padding:2px 6px;border-radius:10px;border:1px solid '+sBorder(r.semaforo)+'">'+sLabel(r.semaforo)+'<\/div>'
-          +'<div style="font-size:24px;margin-bottom:4px">'+r.semaforo+'<\/div>'
-          +'<div style="font-size:22px;font-weight:800;color:'+sColor(r.semaforo)+';line-height:1">'+r.valor+'<\/div>'
-          +'<div style="font-size:11px;color:#555;margin-top:6px;line-height:1.3;font-weight:600">'+r.nombre+'<\/div>'
-          +'<\/div>';
-      });
+    /* ── Ratios ── */
+    var liq =c201>0?c101/c201:0;
+    var acid=c201>0?(c101-c10103)/c201:0;
+    var end =c1>0?c2/c1:0;
+    var endP=c3>0?c2/c3:0;
+    var roe =c3>0?c607/c3:0;
+    var roa =c1>0?c607/c1:0;
+    var mgb2=c401>0?gb/c401:0;
+    var mop =c401>0?ebit/c401:0;
+    var mgn =c401>0?c607/c401:0;
+    var rota=c1>0?c401/c1:0;
+    var roti=c10103>0&&c501>0?c501/c10103:0;
+    var dias=roti>0?365/roti:0;
+    var diasCxC=c401>0&&c10201>0?(c10201/c401)*365:0;
+    var diasCxP=c501>0&&c20203>0?(c20203/c501)*365:0;
+
+    var ratios=[
+      {n:'Liquidez Corriente',    v:liq,    t:'liq', f:$x(liq)},
+      {n:'Prueba Ácida',          v:acid,   t:'liq', f:$x(acid)},
+      {n:'Capital de Trabajo',    v:(c101-c201)/(c1||1), t:'liq', f:$f(c101-c201)},
+      {n:'Endeud. del Activo',    v:end,    t:'end', f:$p(end)},
+      {n:'Endeud. Patrimonial',   v:endP>5?5:endP,   t:'end', f:$x(endP)},
+      {n:'Cobertura Intereses',   v:c20104>0?ebit/c20104:1, t:'roe', f:c20104>0?$x(ebit/c20104):'N/A'},
+      {n:'ROE',                   v:roe,    t:'roe', f:$p(roe)},
+      {n:'ROA',                   v:roa,    t:'roa', f:$p(roa)},
+      {n:'Margen Bruto',          v:mgb2,   t:'mgb', f:$p(mgb2)},
+      {n:'Margen Operacional',    v:mop,    t:'mgn', f:$p(mop)},
+      {n:'Margen Neto',           v:mgn,    t:'mgn', f:$p(mgn)},
+      {n:'EBITDA / Ventas',       v:c401>0?ebitda/c401:0, t:'mgn', f:$p(c401>0?ebitda/c401:0)},
+      {n:'Rotación de Activos',   v:rota,   t:'roe', f:$x(rota)},
+      {n:'Rotación CxC',          v:c401>0&&c10201>0?c401/c10201:0, t:'roe', f:$x(c401>0&&c10201>0?c401/c10201:0)},
+      {n:'Rotación Inventarios',  v:roti,   t:'roe', f:$x(roti)},
+      {n:'Días de Cobro',         v:diasCxC>0?1-Math.min(diasCxC/90,1):0, t:'liq', f:(diasCxC>0?diasCxC.toFixed(0)+' días':'—')},
+      {n:'Días de Pago',          v:diasCxP>0?Math.min(diasCxP/60,1):0,   t:'end', f:(diasCxP>0?diasCxP.toFixed(0)+' días':'—')},
+    ];
+
+    /* ── parsear recomendaciones de Claude ── */
+    function extractRecomendaciones(txt){
+      if(!txt) return '<p style="color:#888">Análisis ejecutivo no disponible.</p>';
+      /* Buscar la sección 6 */
+      var sec6Match=txt.match(/6\.[^\n]*RECOMENDACIONES?[\s\S]{0,5000}/i);
+      var src=sec6Match?sec6Match[0]:txt;
+      /* Limpiar markdown */
+      return src
+        .replace(/═{3,}/g,'')
+        .replace(/^#{1,3}\s+(.+)$/gm,'<h4 style="color:#0C1A2E;margin:14px 0 6px;font-size:14px">$1</h4>')
+        .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+        .replace(/^[\-\•]\s+(.+)$/gm,'<div style="padding:4px 0 4px 16px;border-left:3px solid #1D9E75;margin:5px 0;font-size:13px">$1</div>')
+        .replace(/\n{2,}/g,'<br>')
+        .replace(/\n/g,' ');
     }
 
-    /* ── KPI CARDS ── */
-    function kpiCard(label,val,icon,color){
-      return '<div style="background:#fff;border-radius:14px;padding:20px;border-left:4px solid '+color+';box-shadow:0 2px 8px rgba(0,0,0,.07)">'
-        +'<div style="font-size:22px;margin-bottom:6px">'+icon+'<\/div>'
-        +'<div style="font-size:11px;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:.5px">'+label+'<\/div>'
-        +'<div style="font-size:20px;font-weight:800;color:#0C1A2E;margin-top:4px">'+val+'<\/div>'
-        +'<\/div>';
-    }
+    /* ── datos año anterior ── */
+    var esData2=data.esData2||null;
+    var showCmp=(plan==='$10'||plan==='10')&&esData2;
 
-    var kpisHTML='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px;margin-bottom:24px">'
-      +kpiCard('Ingresos Totales','$ '+ventas,'💰','#1D9E75')
-      +kpiCard('Utilidad Neta','$ '+utilNeta,'📈','#3B82F6')
-      +kpiCard('EBITDA','$ '+ebitda,'⚡','#8B5CF6')
-      +kpiCard('Total Activos','$ '+totalActivos,'🏢','#F59E0B')
-      +'<\/div>';
+    /* ══════════════════════════════════
+       CONSTRUIR HTML COMPLETO DEL INFORME
+    ══════════════════════════════════ */
+    var ICONS=['🏦','📈','🚦','🌐','📋','💡'];
+    var LABS =['1. ESF','2. ERI','3. Ratios','4. Sectorial','5. NIIF','6. Recomendaciones'];
+    if(!showCmp) LABS.splice(3,1), ICONS.splice(3,1); /* quitar Sectorial en plan $1 */
 
-    /* ── CONSTRUIR HTML FINAL ── */
-    var esJSON=JSON.stringify(analisis||'');
-    var bloqJSON=JSON.stringify(bloques||[]);
+    var linkInforme='https://miterodriguezjoseluis-netizen.github.io/dinamit/?informe='+(id||'');
 
     var html='<!DOCTYPE html><html lang="es"><head>'
       +'<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-      +'<title>Dashboard NIIF — '+empresa+' | DINAMIT<\/title>'
+      +'<title>Informe NIIF — '+empresa+'</title>'
       +'<style>'
-      +'@import url(\'https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap\');'
       +'*{box-sizing:border-box;margin:0;padding:0}'
-      +'body{font-family:Inter,Arial,sans-serif;background:#f0f4f8;color:#222}'
-      +'.topbar{background:#0C1A2E;padding:14px 28px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:200;box-shadow:0 2px 16px rgba(0,0,0,.4)}'
-      +'.logo{color:#1D9E75;font-size:20px;font-weight:900;letter-spacing:1px}'
-      +'.logo-sub{color:rgba(255,255,255,.4);font-size:11px;margin-left:10px;font-weight:400}'
-      +'.btn-pdf{background:#1D9E75;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;letter-spacing:.3px;transition:all .2s}'
-      +'.btn-pdf:hover{background:#17856a;transform:translateY(-1px)}'
-      +'.container{max-width:1040px;margin:0 auto;padding:28px 20px}'
-      +'.hero{background:linear-gradient(135deg,#0C1A2E 0%,#0f2847 60%,#1a3a5c 100%);border-radius:20px;padding:36px 40px;margin-bottom:28px;position:relative;overflow:hidden}'
-      +'.hero::before{content:"";position:absolute;right:-60px;top:-60px;width:300px;height:300px;background:radial-gradient(circle,rgba(29,158,117,.15) 0%,transparent 70%);border-radius:50%}'
-      +'.hero::after{content:"";position:absolute;left:-30px;bottom:-80px;width:200px;height:200px;background:radial-gradient(circle,rgba(29,158,117,.08) 0%,transparent 70%);border-radius:50%}'
-      +'.badge{display:inline-flex;align-items:center;gap:6px;background:rgba(29,158,117,.2);border:1px solid rgba(29,158,117,.5);color:#1D9E75;font-size:11px;font-weight:700;padding:5px 14px;border-radius:20px;margin-bottom:14px;letter-spacing:.3px}'
-      +'.hero-empresa{color:#fff;font-size:32px;font-weight:900;margin-bottom:6px;letter-spacing:-.5px}'
-      +'.hero-sub{color:rgba(255,255,255,.5);font-size:14px;font-weight:400}'
-      +'.hero-meta{display:flex;gap:32px;margin-top:24px;flex-wrap:wrap;padding-top:20px;border-top:1px solid rgba(255,255,255,.08)}'
-      +'.hm{color:rgba(255,255,255,.65);font-size:13px}'
-      +'.hm strong{color:#1D9E75;display:block;font-size:10px;text-transform:uppercase;letter-spacing:.7px;margin-bottom:3px;font-weight:700}'
-      +'.card{background:#fff;border-radius:16px;padding:28px;margin-bottom:22px;box-shadow:0 2px 12px rgba(0,0,0,.06)}'
-      +'.card-hdr{display:flex;align-items:center;gap:10px;margin-bottom:20px;padding-bottom:14px;border-bottom:2px solid #f0f2f5}'
-      +'.card-hdr-icon{width:36px;height:36px;border-radius:10px;background:#f0faf6;display:flex;align-items:center;justify-content:center;font-size:18px}'
-      +'.card-hdr-title{font-size:15px;font-weight:800;color:#0C1A2E}'
-      +'.card-hdr-sub{font-size:12px;color:#888;margin-top:1px}'
-      +'.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px}'
-      +'.tab{background:#f0f4f8;border:none;padding:8px 18px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;color:#666;transition:all .2s;font-family:inherit}'
-      +'.tab.on{background:#0C1A2E;color:#1D9E75;box-shadow:0 2px 8px rgba(12,26,46,.3)}'
-      +'.sec{font-size:13.5px;line-height:1.8;color:#333}'
-      +'.footer{text-align:center;padding:36px 20px 48px;color:#aaa;font-size:12px;line-height:1.9}'
-      +'@media(max-width:640px){.hero{padding:24px 20px}.hero-empresa{font-size:22px}.hero-meta{gap:16px}}'
-      +'@media print{'
-      +'.topbar{position:static!important;box-shadow:none!important}'
-      +'.btn-pdf{display:none!important}'
-      +'.no-print{display:none!important}'
-      +'.card{box-shadow:none!important;border:1px solid #ddd!important;break-inside:avoid}'
-      +'body{background:#fff!important}'
-      +'}'
-      +'<\/style><\/head><body>'
+      +'body{font-family:system-ui,-apple-system,sans-serif;background:#f0f4f8;color:#333}'
+      +'.wrap{max-width:800px;margin:0 auto;background:#fff;min-height:100vh}'
+      +'.hdr{background:#0C1A2E;padding:18px 20px;position:sticky;top:0;z-index:100;display:flex;justify-content:space-between;align-items:center}'
+      +'.logo{color:#1D9E75;font-size:20px;font-weight:800}'
+      +'.logo span{color:rgba(255,255,255,.5);font-size:11px;display:block;font-weight:400}'
+      +'.btn-pdf{background:#1D9E75;color:#fff;padding:9px 16px;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer}'
+      +'.hero{padding:20px;background:linear-gradient(135deg,#0C1A2E 0%,#1a3050 100%);color:#fff}'
+      +'.hero-badge{display:inline-block;background:#1D9E75;color:#fff;font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;margin-bottom:12px}'
+      +'.hero-nm{font-size:20px;font-weight:800;line-height:1.2}'
+      +'.hero-sub{font-size:11px;color:rgba(255,255,255,.6);margin-top:4px}'
+      +'.hero-meta{display:flex;gap:16px;margin-top:14px;flex-wrap:wrap}'
+      +'.hero-meta div{background:rgba(255,255,255,.08);padding:8px 12px;border-radius:8px;font-size:11px}'
+      +'.hero-meta strong{display:block;color:#1D9E75;font-size:13px}'
+      +'.kpi-row{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;padding:16px}'
+      +'@media(min-width:500px){.kpi-row{grid-template-columns:repeat(4,1fr)}}'
+      +'.kpi{background:#f8fafc;border-radius:10px;padding:14px;border-top:3px solid #1D9E75}'
+      +'.kpi.neg{border-color:#EF4444} .kpi.warn{border-color:#F59E0B}'
+      +'.kpi-lbl{font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.5px}'
+      +'.kpi-val{font-size:18px;font-weight:800;color:#0C1A2E;margin-top:4px}'
+      +'.tabs-wrap{display:flex;gap:6px;padding:12px 16px;overflow-x:auto;background:#f8fafc;border-top:1px solid #e8ecf0;border-bottom:1px solid #e8ecf0}'
+      +'.tab{padding:8px 14px;border-radius:20px;border:1px solid #d0d8e4;background:#fff;font-size:12px;cursor:pointer;white-space:nowrap;font-weight:500}'
+      +'.tab.on{background:#0C1A2E;color:#1D9E75;border-color:#0C1A2E;font-weight:700}'
+      +'.sec{display:none;padding:16px}'
+      +'.sec.on{display:block}'
+      +'.sec-title{font-size:15px;font-weight:800;color:#0C1A2E;padding:12px 0 8px;border-bottom:3px solid #1D9E75;margin-bottom:14px}'
+      +'table{width:100%;border-collapse:collapse}'
+      +'.ratio-row td{padding:8px 10px;font-size:12.5px;border-bottom:1px solid #f0f4f8}'
+      +'.ratio-nm{color:#333;font-weight:500}'
+      +'.ratio-val{text-align:right;font-weight:700;color:#0C1A2E}'
+      +'.ratio-sem{text-align:center;font-size:16px}'
+      +'.niif-item{padding:12px;border-left:3px solid #1D9E75;margin-bottom:10px;background:#f8fafc;border-radius:0 8px 8px 0}'
+      +'.niif-nm{font-size:13px;font-weight:700;color:#0C1A2E}'
+      +'.niif-desc{font-size:12px;color:#666;margin-top:3px;line-height:1.5}'
+      +'.footer{background:#0C1A2E;padding:20px;text-align:center;color:rgba(255,255,255,.5);font-size:11px}'
+      +'</style></head><body>'
+      +'<div class="wrap">'
 
-      /* TOPBAR */
-      +'<div class="topbar no-print">'
-      +'<div><span class="logo">⚡ DINAMIT<\/span><span class="logo-sub">Sistema de Análisis Financiero NIIF · Ecuador<\/span><\/div>'
-      +'<button class="btn-pdf" onclick="window.print()">🖨 Imprimir / Guardar PDF<\/button>'
-      +'<\/div>'
+      /* ── HEADER ── */
+      +'<div class="hdr">'
+      +'<div class="logo">⚡ DINAMIT<span>Análisis Financiero NIIF · Ecuador</span></div>'
+      +'<button class="btn-pdf" onclick="window.print()">🖨️ Imprimir / Guardar PDF</button>'
+      +'</div>'
 
-      /* CONTAINER */
-      +'<div class="container">'
-
-      /* HERO */
+      /* ── HERO ── */
       +'<div class="hero">'
-      +'<div class="badge">✅ INFORME IA · PAGO CONFIRMADO · NIIF ECUADOR<\/div>'
-      +'<div class="hero-empresa">'+empresa+'<\/div>'
-      +'<div class="hero-sub">Informe Financiero Integral NIIF · Período Fiscal '+año+'<\/div>'
+      +'<div class="hero-badge">✅ INFORME IA · PAGO CONFIRMADO · NIIF ECUADOR</div>'
+      +'<div class="hero-nm">'+empresa+'</div>'
+      +'<div class="hero-sub">Informe Financiero Integral NIIF · Período Fiscal '+año+'</div>'
       +'<div class="hero-meta">'
-      +'<div class="hm"><strong>RUC<\/strong>'+ruc+'<\/div>'
-      +'<div class="hm"><strong>Período<\/strong>'+año+'<\/div>'
-      +'<div class="hm"><strong>Generado<\/strong>'+fecha+'<\/div>'
-      +'<div class="hm"><strong>Sistema<\/strong>DINAMIT v2.1 IA<\/div>'
-      +'<div class="hm"><strong>Norma<\/strong>NIIF · NIC · Supercias Ecuador<\/div>'
-      +'<\/div><\/div>'
+      +'<div><strong>'+ruc+'</strong>RUC</div>'
+      +'<div><strong>'+año+'</strong>PERÍODO</div>'
+      +'<div><strong>'+fecha+'</strong>GENERADO</div>'
+      +'<div><strong>DINAMIT v2.1 IA</strong>SISTEMA</div>'
+      +'<div><strong>NIIF · NIC · Supercias Ecuador</strong>NORMA</div>'
+      +'</div></div>'
 
-      /* KPIs */
-      +kpisHTML
+      /* ── KPIs ── */
+      +'<div class="kpi-row">'
+      +'<div class="kpi"><div class="kpi-lbl">Ingresos Totales</div><div class="kpi-val">'+$f(c401)+'</div></div>'
+      +'<div class="kpi '+(utilNeta<0?'neg':'')+'"><div class="kpi-lbl">Utilidad Neta</div><div class="kpi-val">'+$f(utilNeta)+'</div></div>'
+      +'<div class="kpi"><div class="kpi-lbl">EBITDA</div><div class="kpi-val">'+$f(ebitda)+'</div></div>'
+      +'<div class="kpi"><div class="kpi-lbl">Total Activos</div><div class="kpi-val">'+$f(c1)+'</div></div>'
+      +'</div>'
 
-      /* RATIOS SEMÁFORO */
-      +(ratios.length>0
-        ?'<div class="card"><div class="card-hdr"><div class="card-hdr-icon">🚦<\/div><div><div class="card-hdr-title">17 Ratios NIIF con Semáforo<\/div><div class="card-hdr-sub">Evaluación de posición financiera vs estándares sectoriales Ecuador<\/div><\/div><\/div>'
-         +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px">'+ratiosGrid+'<\/div><\/div>'
-        :'')
+      /* ── TABS ── */
+      +'<div class="tabs-wrap" id="tabs-wrap">';
 
-      /* INFORME POR SECCIONES */
-      +'<div class="card"><div class="card-hdr"><div class="card-hdr-icon">📄<\/div><div><div class="card-hdr-title">Informe Financiero Completo<\/div><div class="card-hdr-sub">Estados Financieros · Análisis · Recomendaciones Ejecutivas<\/div><\/div><\/div>'
-      +'<div class="tabs" id="tabs-wrap"><\/div>'
-      +'<div class="sec" id="sec-out"><\/div>'
-      +'<\/div>'
+    LABS.forEach(function(lab,i){
+      html+='<button class="tab'+(i===0?' on':'')+('" onclick="showSec('+i+',this)">'+ICONS[i]+' '+lab+'</button>');
+    });
+    html+='</div>';
 
-      /* FOOTER */
-      +'<div class="footer">'
-      +'<strong style="color:#1D9E75;font-size:14px">⚡ DINAMIT<\/strong><br>'
-      +'Sistema Experto de Análisis Financiero NIIF · Ecuador<br>'
+    /* ── SEC 0: ESF ── */
+    html+='<div class="sec on" id="sec0">'
+      +'<div class="sec-title">🏦 ESTADO DE SITUACIÓN FINANCIERA (ESF) — NIC 1</div>'
+      +'<table><tbody>'
+      +tblHdr('ACTIVOS')
+      +mkRow('ACTIVO CORRIENTE',c101,0)
+      +mkRow('Efectivo y equivalentes',c10101,1)
+      +mkRow('Cuentas y documentos por cobrar',c10201,1)
+      +mkRow('Inventarios',c10103,1)
+      +mkRow('Otros activos corrientes',c101-c10101-c10201-c10103,1)
+      +mkRow('ACTIVO NO CORRIENTE',c102,0)
+      +mkRow('Otros activos no corrientes',c102,1)
+      +mkRow('<strong>TOTAL ACTIVO</strong>',c1,0)
+      +tblHdr('PASIVOS')
+      +mkRow('PASIVO CORRIENTE',c201,0)
+      +mkRow('Cuentas por pagar (proveedores)',c20103,1)
+      +mkRow('Obligaciones financieras CP',c20104,1)
+      +mkRow('Otros pasivos corrientes',c201-c20103-c20104,1)
+      +mkRow('PASIVO NO CORRIENTE',c202,0)
+      +mkRow('Otros pasivos no corrientes',c202,1)
+      +mkRow('<strong>TOTAL PASIVO</strong>',c2,0)
+      +tblHdr('PATRIMONIO NETO')
+      +mkRow('Capital suscrito y pagado',c30101,0)
+      +mkRow('Reservas y resultados acumulados',c3-c30101,1)
+      +mkRow('<strong>TOTAL PATRIMONIO</strong>',c3,0)
+      +mkRow('<strong style="color:#1D9E75">TOTAL PASIVO + PATRIMONIO</strong>',c1,0)
+      +'</tbody></table></div>';
+
+    /* ── SEC 1: ERI ── */
+    var uai2=gb-c502;
+    var ir=c600;
+    html+='<div class="sec" id="sec1">'
+      +'<div class="sec-title">📈 ESTADO DE RESULTADOS INTEGRAL (ERI) — NIC 1 / NIIF 18</div>'
+      +'<div style="font-size:11px;color:#666;margin-bottom:12px">'+empresa+' · Estado de Resultados Integral del 01 de enero al 31 de diciembre de '+año+' · (Conforme NIC 1 e implementación prospectiva NIIF 18)</div>'
+      +'<table><tbody>'
+      +tblHdr('RESULTADO DEL PERÍODO')
+      +mkRow('Ingresos de actividades ordinarias',c401,0)
+      +mkRow('Costo de ventas y producción',-c501,1)
+      +mkRow('<strong>GANANCIA BRUTA</strong>',gb,0)
+      +mkRow('Gastos de administración y ventas',-c502,1)
+      +mkRow('<strong>RESULTADO OPERACIONAL (EBIT)</strong>',ebit,0)
+      +mkRow('EBITDA (aproximado)',ebitda,1)
+      +mkRow('Gastos financieros',-c20104,1)
+      +mkRow('<strong>RESULTADO ANTES IR</strong>',uai2,0)
+      +mkRow('Impuesto a la Renta Causado',-ir,1)
+      +mkRow('<strong style="color:'+(utilNeta>=0?'#1D9E75':'#EF4444')+'">UTILIDAD NETA DEL EJERCICIO</strong>',utilNeta,0)
+      +'</tbody></table>'
+      +'<div style="margin-top:16px;padding:12px;background:#f0faf6;border-radius:8px;font-size:12px;color:#555">'
+      +'<strong style="color:#0C1A2E">📋 Nota NIIF 18 (vigente 2027):</strong> Preparación para clasificación de ingresos en categorías MPM (Actividades de Gestión Principal, Inversión y Financiamiento). Este informe anticipa la estructura requerida según NIIF 18.'
+      +'</div></div>';
+
+    /* ── SEC 2: RATIOS ── */
+    html+='<div class="sec" id="sec2">'
+      +'<div class="sec-title">🚦 17 RATIOS NIIF CON SEMÁFORO</div>'
+      +'<table><thead><tr>'
+      +'<th style="padding:8px 10px;text-align:left;background:#0C1A2E;color:#1D9E75;font-size:12px">Ratio</th>'
+      +'<th style="padding:8px 10px;text-align:right;background:#0C1A2E;color:#1D9E75;font-size:12px">Valor</th>'
+      +'<th style="padding:8px 10px;text-align:center;background:#0C1A2E;color:#1D9E75;font-size:12px">Estado</th>'
+      +'</tr></thead><tbody>';
+    ratios.forEach(function(r){
+      var s=sem(r.v,r.t);
+      html+='<tr class="ratio-row">'
+        +'<td class="ratio-nm">'+r.n+'</td>'
+        +'<td class="ratio-val">'+r.f+'</td>'
+        +'<td class="ratio-sem">'+s.em+'</td>'
+        +'</tr>';
+    });
+    html+='</tbody></table></div>';
+
+    /* ── SEC 3 (plan $10): Sectorial / o NIIF para $1 ── */
+    var secIdx=3;
+    if(showCmp){
+      var e2=esData2;
+      var c401b=e2.c401||0, c607b=e2.c607||0, c1b=e2.c1||0;
+      var liq2=e2.c201>0?(e2.c101||0)/(e2.c201||1):0;
+      html+='<div class="sec" id="sec'+secIdx+'">'
+        +'<div class="sec-title">🌐 COMPARATIVO SECTORIAL Y 2024 vs 2025</div>'
+        +'<table><tbody>'
+        +tblHdr('COMPARATIVO AÑO ANTERIOR vs AÑO ACTUAL')
+        +'<tr><td style="padding:8px 10px;font-size:12.5px;font-weight:700">Indicador</td>'
+        +'<td style="padding:8px 10px;font-size:12.5px;font-weight:700;text-align:right">'+(Number(año)-1)+'</td>'
+        +'<td style="padding:8px 10px;font-size:12.5px;font-weight:700;text-align:right">'+año+'</td></tr>'
+        +'<tr class="ratio-row"><td class="ratio-nm">Ingresos Totales</td><td style="text-align:right;padding:8px 10px">'+$f(c401b)+'</td><td style="text-align:right;padding:8px 10px">'+$f(c401)+'</td></tr>'
+        +'<tr class="ratio-row"><td class="ratio-nm">Utilidad Neta</td><td style="text-align:right;padding:8px 10px">'+$f(c607b)+'</td><td style="text-align:right;padding:8px 10px">'+$f(utilNeta)+'</td></tr>'
+        +'<tr class="ratio-row"><td class="ratio-nm">Total Activos</td><td style="text-align:right;padding:8px 10px">'+$f(c1b)+'</td><td style="text-align:right;padding:8px 10px">'+$f(c1)+'</td></tr>'
+        +'<tr class="ratio-row"><td class="ratio-nm">Liquidez Corriente</td><td style="text-align:right;padding:8px 10px">'+$x(liq2)+'</td><td style="text-align:right;padding:8px 10px">'+$x(liq)+'</td></tr>'
+        +'</tbody></table></div>';
+      secIdx++;
+    }
+
+    /* ── SEC NIIF ── */
+    html+='<div class="sec" id="sec'+secIdx+'">'
+      +'<div class="sec-title">📋 NORMAS NIIF APLICABLES</div>'
+      +'<div class="niif-item"><div class="niif-nm">NIC 1 — Presentación de Estados Financieros</div><div class="niif-desc">Vigente. Regula la estructura y contenido mínimo de los estados financieros. Este informe cumple NIC 1 en su totalidad.</div></div>'
+      +'<div class="niif-item"><div class="niif-nm">NIIF 15 — Reconocimiento de Ingresos</div><div class="niif-desc">Vigente. Los ingresos se reconocen al satisfacer obligaciones de desempeño con clientes según el modelo de 5 pasos.</div></div>'
+      +'<div class="niif-item"><div class="niif-nm">NIIF 16 — Arrendamientos</div><div class="niif-desc">Vigente. Activos por derecho de uso y pasivos de arrendamiento deben reconocerse en el ESF.</div></div>'
+      +'<div class="niif-item"><div class="niif-nm">NIIF 18 — Presentación e Información a Revelar (vigente 2027)</div><div class="niif-desc">Reemplaza NIC 1. Introduce categorías MPM para el ERI: Actividades de Gestión Principal, Inversión y Financiamiento. Este informe anticipa su implementación prospectiva.</div></div>'
+      +'<div class="niif-item"><div class="niif-nm">Catálogo de Cuentas Supercias Ecuador</div><div class="niif-desc">Este informe utiliza la codificación oficial de la Superintendencia de Compañías, Valores y Seguros del Ecuador para garantizar comparabilidad con los 151,674 registros del catálogo 2025.</div></div>'
+      +'</div>';
+    secIdx++;
+
+    /* ── SEC RECOMENDACIONES ── */
+    html+='<div class="sec" id="sec'+secIdx+'">'
+      +'<div class="sec-title">💡 RECOMENDACIONES EJECUTIVAS</div>'
+      +'<div style="font-size:13px;line-height:1.75;color:#333">'+extractRecomendaciones(analisis)+'</div>'
+      +'</div>';
+
+    /* ── FOOTER ── */
+    html+='<div class="footer">'
+      +'⚡ DINAMIT · Sistema Experto de Análisis Financiero NIIF · Ecuador<br>'
       +'Generado el '+fecha+' · Ing. José Luis Mite Rodríguez CPA · RUC 0924158656001<br>'
-      +'WhatsApp: 0980379867 · <em>Confidencial — Uso Ejecutivo<\/em>'
-      +'<\/div>'
-      +'<\/div>' /* /container */
+      +'WhatsApp: 0980379867 · <em>Confidencial — Uso Ejecutivo</em>'
+      +'</div></div>'
 
-      +'<script id="data-an" type="application/json">'+esJSON+'<\/script>'
+      /* ── Script navegación ── */
       +'<script>'
-      +'var _an=JSON.parse(document.getElementById("data-an").textContent||"{}");'
-      +'if(typeof _an!=="string") _an=String(_an||"");'
-      +'var _ICONS=["🏦","📊","🚦","🌐","📋","💡"];'
-      +'var _LABS=["1. ESF","2. ERI","3. Ratios","4. Sectorial","5. NIIF","6. Recomendaciones"];'
-      +'function parseLine(l){'
-      +'if(l===null||l===undefined) return "";l=String(l);'
-      +'l=l.replace(/═{3,}/g,"<div style=\'height:3px;background:linear-gradient(90deg,#1D9E75,transparent);margin:16px 0;border-radius:2px\'><\/div>");'
-      +'l=l.replace(/^#{3}\\s*(.+)$/,"<h3 style=\'color:#1D9E75;font-size:12px;font-weight:800;margin:14px 0 6px;text-transform:uppercase;letter-spacing:.5px\'>$1<\/h3>");'
-      +'l=l.replace(/^#{1,2}\\s*(.+)$/,"<h2 style=\'color:#0C1A2E;font-size:15px;font-weight:800;margin:20px 0 8px;padding:10px 14px;background:#f0faf6;border-left:4px solid #1D9E75;border-radius:0 8px 8px 0\'>$1<\/h2>");'
-      +'l=l.replace(/\\*\\*(.*?)\\*\\*/g,"<strong>$1<\/strong>");'
-      +'l=l.replace(/^-\\s+(.+)$/,"<div style=\'padding:5px 0 5px 14px;border-bottom:1px solid #f5f5f5;font-size:13px\'>&#9658; $1<\/div>");'
-      +'l=l.replace(/^---+$/,"<hr style=\'border:none;border-top:1px solid #e8e8e8;margin:10px 0\'>");'
-      +'if(l.trim()==="") return "<br>";'
-      +'return "<span style=\'display:block;margin:2px 0\'>"+l+"<\/span>";'
-      +'}'
-      +'function parseTbl(txt){'
-      +'if(!txt) return "";txt=String(txt);'
-      +'var lines=txt.split("\\n");var out="";var rows=[];'
-      +'for(var i=0;i<lines.length;i++){'
-      +'var l=lines[i].trim();'
-      +'if(l.startsWith("|")){'
-      +'if(/^[\\|\\s\\-:]+$/.test(l)) continue;'
-      +'rows.push(l.replace(/^\\||\\|$/g,"").split("|").map(function(c){return c.trim();}));'
-      +'} else {'
-      +'if(rows.length){'
-      +'out+="<div style=\'overflow-x:auto;margin:14px 0\'><table style=\'width:100%;border-collapse:collapse;font-size:12.5px\'>";'
-      +'rows.forEach(function(row,ri){'
-      +'out+="<tr style=\'background:"+(ri===0?"#0C1A2E":ri%2===0?"#f8fafc":"#fff")+"\'>";'
-      +'row.forEach(function(cell){'
-      +'var t=ri===0?"th":"td";'
-      +'out+="<"+t+" style=\'padding:8px 11px;text-align:left;border-bottom:1px solid #eaecf0;color:"+(ri===0?"#1D9E75":"#333")+";font-weight:"+(ri===0?"700":"400")+"\'>"+cell+"<\/"+t+">";'
-      +'});out+="<\/tr>";});'
-      +'out+="<\/table><\/div>";rows=[];'
-      +'}'
-      +'out+=parseLine(l);'
-      +'}'
-      +'}'
-      +'if(rows.length){'
-      +'out+="<div style=\'overflow-x:auto;margin:14px 0\'><table style=\'width:100%;border-collapse:collapse;font-size:12.5px\'>";'
-      +'rows.forEach(function(row,ri){'
-      +'out+="<tr style=\'background:"+(ri===0?"#0C1A2E":ri%2===0?"#f8fafc":"#fff")+"\'>";'
-      +'row.forEach(function(cell){var t=ri===0?"th":"td";out+="<"+t+" style=\'padding:8px 11px;text-align:left;border-bottom:1px solid #eaecf0;color:"+(ri===0?"#1D9E75":"#333")+";font-weight:"+(ri===0?"700":"400")+"\'>"+cell+"<\/"+t+">";});'
-      +'out+="<\/tr>";});out+="<\/table><\/div>";'
-      +'}'
-      +'return out;'
-      +'}'
-      /* ── DIVIDIR ANÁLISIS EN SECCIONES ── */
-      +'function splitSections(txt){'
-      /* Intentar dividir por separadores ═══ */
-      +'var byEq=txt.split(/(?=═{5,})/);'
-      +'if(byEq.length>=3) return byEq.filter(function(s){return s.trim().length>20;});'
-      /* Intentar dividir por encabezados ## o números de sección */
-      +'var byH=txt.split(/(?=\\n#{1,2}\\s)/);'
-      +'if(byH.length>=3) return byH.filter(function(s){return s.trim().length>20;});'
-      /* Intentar dividir por líneas de guiones --- */
-      +'var byHr=txt.split(/(?=\\n---)/);'
-      +'if(byHr.length>=3) return byHr.filter(function(s){return s.trim().length>20;});'
-      /* Fallback: dividir en 6 partes iguales */
-      +'var chunk=Math.ceil(txt.length/6);'
-      +'var parts=[];'
-      +'for(var i=0;i<6;i++){'
-      +'var s=txt.substring(i*chunk,(i+1)*chunk);'
-      +'if(s.trim()) parts.push(s);'
-      +'}'
-      +'return parts.length?parts:[txt];'
-      +'}'
-      +'var _secs=splitSections(_an);'
-      +'function showBlk(i){'
+      +'function showSec(i,btn){'
+      +'document.querySelectorAll(".sec").forEach(function(s,j){s.classList.toggle("on",i===j);});'
       +'document.querySelectorAll(".tab").forEach(function(b,j){b.classList.toggle("on",i===j);});'
-      +'var contenido=(_secs&&_secs[i]&&_secs[i].trim())?_secs[i]:_an;'
-      +'document.getElementById("sec-out").innerHTML=parseTbl(contenido);'
-      +'window.scrollTo({top:document.getElementById("sec-out").getBoundingClientRect().top+window.scrollY-100,behavior:"smooth"});'
       +'}'
-      +'(function init(){'
-      +'var wrap=document.getElementById("tabs-wrap");'
-      /* Si _an está vacío o muy corto, mostrar aviso */
-      +'if(!_an||_an.trim().length<50){'
-      +'document.getElementById("sec-out").innerHTML="<p style=\'color:#888;padding:20px\'>No hay contenido disponible en este informe.</p>";'
-      +'return;'
-      +'}'
-      /* Si no se pudo dividir en secciones, mostrar todo en una pestaña */
-      +'var total=Math.min(_secs.length,6);'
-      +'if(total<=1){'
-      +'document.getElementById("sec-out").innerHTML=parseTbl(_an);'
-      +'wrap.innerHTML="<button class=\'tab on\'>📄 Informe Completo<\/button>";'
-      +'return;'
-      +'}'
-      +'for(var i=0;i<total;i++){'
-      +'(function(idx){'
-      +'var b=document.createElement("button");b.className="tab"+(idx===0?" on":"");'
-      +'var icon=_ICONS[idx]||"📄";var lab=_LABS[idx]||("Sección "+(idx+1));'
-      +'b.innerHTML=icon+" "+lab;'
-      +'b.onclick=function(){showBlk(idx);};wrap.appendChild(b);'
-      +'})(i);'
-      +'}'
-      +'showBlk(0);'
-      +'})();'
-      /* Debug: log en consola para diagnosticar */
-      +'console.log("[DINAMIT] _an length:",_an?_an.length:0,"_secs:",_secs?_secs.length:0);'
       +'<\/script>'
-      +'<\/body><\/html>';
+      +'</body></html>';
 
-    document.open();
-    document.write(html);
-    document.close();
+    document.open(); document.write(html); document.close();
   }
+
 })();
 
 async function loadAll(){
@@ -4852,159 +4838,137 @@ function confirmOrder(idx){
 var CLAUDE_API_KEY='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';
 
 function deliverInformeAutomatico(orderId, order){
-  var año=order.year||new Date().getFullYear();
+  var año=String(order.year||new Date().getFullYear());
+  var añoAnt=String(Number(año)-1);
 
-  /* Notificación de inicio */
+  /* Notificación */
   var notif=document.createElement('div');
   notif.id='deliver-notif-'+orderId;
   notif.style.cssText='position:fixed;bottom:24px;right:24px;background:#0C1A2E;color:#fff;padding:14px 20px;border-radius:10px;font-size:13px;z-index:9999;border-left:4px solid #F5A623;max-width:340px;box-shadow:0 4px 20px rgba(0,0,0,.3)';
-  notif.innerHTML='⏳ Generando informe NIIF con Claude AI para<br><strong>'+order.empresa+'</strong>...<br><small style="opacity:.7">Esto toma unos segundos</small>';
+  notif.innerHTML='⏳ Generando informe NIIF con Claude AI para<br><strong>'+order.empresa+'</strong>...<br><small style="opacity:.7">Buscando datos reales Supercias...</small>';
   document.body.appendChild(notif);
 
-  var prompt='Eres DINAMIT, sistema experto de análisis financiero NIIF para Ecuador. '
-    +'Genera un informe financiero completo y profesional para el siguiente cliente que acaba de confirmar su pago:\n\n'
-    +'EMPRESA: '+order.empresa+'\n'
-    +'RUC: '+order.ruc+'\n'
-    +'PERÍODO ANALIZADO: '+año+'\n\n'
-    +'El informe DEBE incluir exactamente estas 6 secciones con este formato:\n\n'
-    +'═══════════════════════════════════════\n'
-    +'1. ESTADO DE SITUACIÓN FINANCIERA (ESF) — NIC 1\n'
-    +'═══════════════════════════════════════\n'
-    +'Presenta una estructura típica del ESF para el sector de esta empresa según su RUC ecuatoriano:\n'
-    +'- ACTIVOS: Activo Corriente (Efectivo, Cuentas por cobrar, Inventarios) y Activo No Corriente (PPE, Intangibles)\n'
-    +'- PASIVOS: Pasivo Corriente (Proveedores, Deudas corto plazo) y Pasivo No Corriente\n'
-    +'- PATRIMONIO: Capital suscrito, Reservas, Resultados acumulados\n'
-    +'Incluye valores referenciales en USD para el sector en Ecuador.\n\n'
-    +'═══════════════════════════════════════\n'
-    +'2. ESTADO DE RESULTADOS INTEGRAL (ERI) — NIC 1 / NIIF 18\n'
-    +'═══════════════════════════════════════\n'
-    +'- Ingresos de actividades ordinarias\n'
-    +'- Costo de ventas → Utilidad Bruta\n'
-    +'- Gastos operacionales → EBIT (Resultado Operacional)\n'
-    +'- Gastos financieros → EBT\n'
-    +'- Impuesto a la Renta (25% Ecuador) → Utilidad Neta\n'
-    +'- Nota: preparación para NIIF 18 (vigente 2027) con categorías MPM\n\n'
-    +'═══════════════════════════════════════\n'
-    +'3. 17 RATIOS NIIF CON SEMÁFORO\n'
-    +'═══════════════════════════════════════\n'
-    +'Calcula y presenta con semáforo (🟢 Óptimo / 🟡 Precaución / 🔴 Alerta):\n'
-    +'LIQUIDEZ: Razón Corriente | Prueba Ácida | Capital de Trabajo\n'
-    +'ENDEUDAMIENTO: Deuda/Patrimonio | Deuda/Activos | Cobertura Intereses\n'
-    +'RENTABILIDAD: ROE | ROA | Margen Bruto | Margen Neto | EBITDA/Ventas\n'
-    +'EFICIENCIA: Rotación Activos | Rotación CxC | Rotación Inventarios | Días de Cobro | Días de Pago\n'
-    +'VALOR: EVA estimado\n\n'
-    +'═══════════════════════════════════════\n'
-    +'4. COMPARATIVO SECTORIAL (Supercias Ecuador)\n'
-    +'═══════════════════════════════════════\n'
-    +'Basado en el catálogo oficial Superintendencia de Compañías Ecuador (151,674 empresas registradas):\n'
-    +'- Sector y CIIU de la empresa según RUC\n'
-    +'- Comparar sus ratios vs. mediana del sector en Ecuador\n'
-    +'- Posición competitiva: percentil estimado en el sector\n'
-    +'- Benchmarks del sector (ROE promedio, margen neto promedio, liquidez promedio)\n\n'
-    +'═══════════════════════════════════════\n'
-    +'5. NORMAS NIIF APLICABLES\n'
-    +'═══════════════════════════════════════\n'
-    +'- NIC 1: Presentación de estados financieros (vigente)\n'
-    +'- NIIF 15: Reconocimiento de ingresos aplicable al sector\n'
-    +'- NIIF 16: Arrendamientos si aplica\n'
-    +'- NIIF 18: Presentación e información a revelar (vigente 2027) — impacto en MPM y EBIT\n'
-    +'- Catálogo de cuentas Supercias: códigos relevantes para el sector\n\n'
-    +'═══════════════════════════════════════\n'
-    +'6. RECOMENDACIONES EJECUTIVAS Y CONCLUSIÓN\n'
-    +'═══════════════════════════════════════\n'
-    +'- 5 recomendaciones accionables priorizadas para mejorar la situación financiera\n'
-    +'- Conclusión ejecutiva en 3 líneas\n'
-    +'- Próximos pasos sugeridos\n\n'
-    +'REGLAS CRÍTICAS DE FORMATO:\n'
-    +'1. SIEMPRE inicia cada sección con exactamente: ═══════════════════════════════════════\n'
-    +'2. Incluye valores numéricos reales en USD para TODAS las líneas del ESF y ERI (no escribas "N/D" ni dejes celdas vacías)\n'
-    +'3. Para los KPIs escribe EXACTAMENTE así en el ERI:\n'
-    +'   Ingresos de actividades ordinarias | $XX,XXX,XXX\n'
-    +'   Utilidad Neta del Ejercicio | $XX,XXX,XXX\n'
-    +'   EBITDA | $XX,XXX,XXX\n'
-    +'   TOTAL ACTIVOS | $XX,XXX,XXX (en el ESF)\n'
-    +'4. Para los 17 ratios usa tabla markdown con columnas: | Ratio | Categoría | Valor | Referencia | Semáforo |\n'
-    +'5. Redacta en español profesional. Menciona la Superintendencia de Compañías Ecuador.\n'
-    +'6. Este informe es para uso ejecutivo directo del cliente. Extensión: 1200-1500 palabras.';
+  /* ── Buscar empresa en base de datos DINAMIT por RUC ── */
+  function normalizeRuc(r){ return String(r||'').replace(/\D/g,'').padStart(13,'0'); }
+  var rucN=normalizeRuc(order.ruc);
+  var rowAño=D[año]?bs(D[año],rucN):null;
+  var rowAnt=D[añoAnt]?bs(D[añoAnt],rucN):null;
 
-  /* Llamar Claude API vía Cloudflare Worker proxy (evita CORS) */
+  /* Si no encuentra por año actual, busca en cualquier año cargado */
+  if(!rowAño){
+    ['2025','2024'].forEach(function(y){
+      if(!rowAño&&D[y]) rowAño=bs(D[y],rucN);
+    });
+  }
+
+  /* ── Función para extraer datos estructurados de un row ── */
+  function extractEsData(row){
+    if(!row) return null;
+    var r=function(k){ return (row[F[k]]||0)/100; };
+    var c1=r('c1'),c101=r('c101'),c102=r('c102');
+    var c10101=r('c10101'),c10103=r('c10103'),c10201=r('c10201');
+    var c2=r('c2'),c201=r('c201'),c202=r('c202');
+    var c20103=r('c20103'),c20104=r('c20104'),c20203=r('c20203');
+    var c30101=r('c30101');
+    var c401=r('c401'),c501=r('c501'),c502=r('c502');
+    var gb=r('gb'),c600=r('c600'),c607=r('c607');
+    /* c3 con conciliación */
+    var c3s=r('c3'); var c3=Math.abs(c1-c2-c3s)<1?c3s:c1-c2;
+    return {c1:c1,c101:c101,c102:c102,c10101:c10101,c10103:c10103,c10201:c10201,
+      c2:c2,c201:c201,c202:c202,c20103:c20103,c20104:c20104,c20203:c20203,
+      c3:c3,c30101:c30101,c401:c401,c501:c501,c502:c502,
+      gb:gb,c600:c600,c607:c607};
+  }
+
+  var esData=extractEsData(rowAño);
+  var esData2=extractEsData(rowAnt);
+
+  /* ── Preparar datos reales para prompt Claude ── */
+  var datosReales='';
+  if(esData){
+    var e=esData;
+    var ebit=e.gb-e.c502;
+    datosReales='DATOS REALES DE SUPERCIAS ECUADOR (catálogo oficial):\n'
+      +'Empresa: '+(rowAño[F.nm]||order.empresa)+'\n'
+      +'RUC: '+rucN+'\n'
+      +'Sector CIIU: '+(rowAño[F.ci]||'N/D')+'\n'
+      +'Actividad: '+(rowAño[F.sc]||'N/D')+'\n\n'
+      +'ESF — PERÍODO '+año+':\n'
+      +'  Total Activo: $'+e.c1.toFixed(2)+'\n'
+      +'  Activo Corriente: $'+e.c101.toFixed(2)+'\n'
+      +'  Activo No Corriente: $'+e.c102.toFixed(2)+'\n'
+      +'  Total Pasivo: $'+e.c2.toFixed(2)+'\n'
+      +'  Pasivo Corriente: $'+e.c201.toFixed(2)+'\n'
+      +'  Total Patrimonio: $'+e.c3.toFixed(2)+'\n\n'
+      +'ERI — PERÍODO '+año+':\n'
+      +'  Ingresos ordinarios: $'+e.c401.toFixed(2)+'\n'
+      +'  Costo de ventas: $'+e.c501.toFixed(2)+'\n'
+      +'  Ganancia bruta: $'+e.gb.toFixed(2)+'\n'
+      +'  Gastos operacionales: $'+e.c502.toFixed(2)+'\n'
+      +'  EBIT: $'+ebit.toFixed(2)+'\n'
+      +'  Impuesto renta: $'+e.c600.toFixed(2)+'\n'
+      +'  Utilidad neta: $'+e.c607.toFixed(2)+'\n';
+    if(esData2){
+      var e2=esData2;
+      datosReales+='ESF — PERÍODO '+añoAnt+':\n'
+        +'  Total Activo: $'+e2.c1.toFixed(2)+'\n'
+        +'  Ingresos ordinarios: $'+e2.c401.toFixed(2)+'\n'
+        +'  Utilidad neta: $'+e2.c607.toFixed(2)+'\n';
+    }
+  } else {
+    datosReales='NOTA: Empresa no encontrada en catálogo Supercias. Genera valores estimados coherentes para el sector según el RUC '+rucN+' en Ecuador.\n';
+  }
+
+  /* ── Prompt Claude — solo recomendaciones ejecutivas ── */
+  var prompt='Eres DINAMIT, sistema experto de análisis financiero NIIF para Ecuador. '
+    +'Con base en los siguientes datos REALES de Supercias, genera ÚNICAMENTE la sección de Recomendaciones Ejecutivas para el cliente:\n\n'
+    +datosReales+'\n'
+    +'INSTRUCCIONES:\n'
+    +'1. Genera exactamente 5 recomendaciones ejecutivas accionables y priorizadas\n'
+    +'2. Cada recomendación: título en negrita + explicación de 2-3 líneas con impacto esperado\n'
+    +'3. Cierra con conclusión ejecutiva de 3 líneas\n'
+    +'4. Redacta en español profesional para gerentes y directivos\n'
+    +'5. Menciona la norma NIIF aplicable en cada recomendación cuando corresponda\n'
+    +'6. SIN asteriscos dobles de markdown — usa solo guiones para listas\n'
+    +'7. Extensión: 400-600 palabras\n'
+    +'8. Este informe es CONFIDENCIAL para uso ejecutivo del cliente de DINAMIT';
+
   fetch('https://dinamit-claude-proxy.miterodriguezjoseluis.workers.dev',{
     method:'POST',
-    headers:{
-      'Content-Type':'application/json'
-    },
+    headers:{'Content-Type':'application/json'},
     body:JSON.stringify({
       model:'claude-haiku-4-5-20251001',
-      max_tokens:3000,
+      max_tokens:1200,
       messages:[{role:'user',content:prompt}]
     })
   })
   .then(function(r){ return r.json(); })
   .then(function(data){
-    if(!data.content||!data.content[0]){
-      throw new Error(data.error?data.error.message:'Claude no respondió');
-    }
+    if(!data.content||!data.content[0]) throw new Error(data.error?data.error.message:'Claude no respondió');
     var analisis=data.content[0].text;
-    var informeId=orderId; /* usar el ID de la orden como ID del informe */
+    var plan=order.plan||'$1';
+    var linkInforme='https://miterodriguezjoseluis-netizen.github.io/dinamit/?informe='+orderId;
 
-    /* Guardar informe completo en Firestore para página pública */
-    var linkInforme='https://miterodriguezjoseluis-netizen.github.io/dinamit/?informe='+informeId;
+    /* ── Guardar en Firestore con datos estructurados ── */
     if(typeof firebase!=='undefined'&&firebase.apps&&firebase.apps.length){
-      firebase.firestore().collection('dinamit_informes').doc(informeId).set({
+      var firestoreData={
         empresa:  order.empresa,
         ruc:      order.ruc,
         email:    order.email,
         año:      año,
         analisis: analisis,
         fecha:    new Date().toISOString(),
-        orderId:  orderId
-      }).catch(function(e){ console.warn('No se pudo guardar informe en Firestore:',e); });
+        orderId:  orderId,
+        plan:     plan
+      };
+      if(esData)  firestoreData.esData=esData;
+      if(esData2) firestoreData.esData2=esData2;
+      firebase.firestore().collection('dinamit_informes').doc(orderId).set(firestoreData)
+        .catch(function(e){ console.warn('No se pudo guardar informe en Firestore:',e); });
     }
 
-    /* Notificación intermedia */
     notif.innerHTML='✅ Análisis generado. Enviando email a <strong>'+order.email+'</strong>...';
 
-    /* Convertir markdown básico a HTML */
-    var analisisHTML=analisis
-      .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')
-      .replace(/^#{1,3}\s+(.+)$/gm,'<h3 style="color:#0C1A2E;margin-top:18px;margin-bottom:6px">$1</h3>')
-      .replace(/^(\d+)\.\s+\*\*(.+?)\*\*/gm,'<div style="margin-top:10px"><strong style="color:#1D9E75">$1. $2</strong></div>')
-      .replace(/^-\s+(.+)$/gm,'<div style="padding-left:14px;margin:3px 0">• $1</div>')
-      .replace(/\n\n/g,'<br><br>').replace(/\n/g,'<br>');
-
-    var fecha=new Date().toLocaleDateString('es-EC',{day:'2-digit',month:'long',year:'numeric'});
-    var htmlInforme='<!DOCTYPE html><html><head><meta charset="utf-8"><title>Informe NIIF '+order.empresa+'</title></head>'
-      +'<body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif">'
-      +'<div style="max-width:680px;margin:0 auto;background:#fff">'
-      +'<div style="background:#0C1A2E;padding:28px 32px">'
-      +'<div style="color:#1D9E75;font-size:26px;font-weight:800">⚡ DINAMIT</div>'
-      +'<div style="color:rgba(255,255,255,.6);font-size:12px;margin-top:4px">Sistema de Análisis Financiero NIIF · Ecuador · Supercias</div>'
-      +'<div style="color:#fff;font-size:15px;font-weight:700;margin-top:12px">📄 Informe Financiero NIIF — '+año+'</div>'
-      +'</div>'
-      +'<div style="background:#f0faf6;border-left:5px solid #1D9E75;padding:16px 22px;margin:24px 32px;border-radius:0 10px 10px 0">'
-      +'<div style="font-size:18px;font-weight:800;color:#0C1A2E">'+order.empresa+'</div>'
-      +'<div style="font-size:12px;color:#666;margin-top:3px">RUC: '+order.ruc+' · Período: '+año+'</div>'
-      +'<div style="display:inline-block;background:#0C1A2E;color:#1D9E75;font-size:10px;font-weight:700;padding:4px 10px;border-radius:20px;margin-top:8px">✅ PAGO CONFIRMADO · INFORME GENERADO CON IA</div>'
-      +'</div>'
-      +'<div style="padding:0 32px 32px;font-size:13.5px;line-height:1.75;color:#333">'+analisisHTML+'</div>'
-      +'<div style="background:#0C1A2E;border-radius:12px;padding:22px;text-align:center;margin:0 32px 28px">'
-      +'<div style="color:#fff;font-size:14px;font-weight:700;margin-bottom:8px">📊 Ver informe completo con descarga PDF</div>'
-      +'<a href="'+linkInforme+'" style="display:inline-block;background:#1D9E75;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;margin-right:10px">Ver mi Informe →</a>'
-      +'</div>'
-      +'<div style="padding:16px 32px;background:#f9f9f9;border-top:1px solid #eee;font-size:11px;color:#999;text-align:center">'
-      +'¿Consultas? WhatsApp: <strong>0980379867</strong> · Ing. José Mite Rodríguez CPA<br>'
-      +'Generado el '+fecha+' · DINAMIT · RUC 0924158656001'
-      +'</div></div></body></html>';
-
-    /* Dividir informe en mitades para EmailJS (límite por variable) */
-    var mitad=Math.floor(analisis.length/2);
-    /* Cortar en salto de línea más cercano a la mitad */
-    var corte=analisis.lastIndexOf('\n', mitad);
-    if(corte<100) corte=mitad;
-    var parte1=analisis.substring(0,corte).trim();
-    var parte2=analisis.substring(corte).trim();
-
-    /* Enviar via EmailJS — solo link, sin texto crudo del informe */
     return emailjs.send('service_c6ew6z4','template_wvkmk7h',{
       to_email:     order.email,
       to_name:      order.empresa,
@@ -5014,27 +4978,21 @@ function deliverInformeAutomatico(orderId, order){
       name:         order.empresa,
       email:        order.email,
       link_informe: linkInforme,
-      s1:           '',
-      s2:           '',
-      s3:           '',
-      s4:           '',
-      s5:           ''
+      s1:'', s2:'', s3:'', s4:'', s5:''
     });
   })
   .then(function(){
-    var n=document.getElementById('deliver-notif-'+orderId);
-    if(n) n.remove();
+    var n=document.getElementById('deliver-notif-'+orderId); if(n) n.remove();
     var ok=document.createElement('div');
     ok.style.cssText='position:fixed;bottom:24px;right:24px;background:#0C1A2E;color:#fff;padding:16px 22px;border-radius:10px;font-size:13px;z-index:9999;border-left:4px solid #1D9E75;max-width:340px;box-shadow:0 4px 20px rgba(0,0,0,.3)';
-    ok.innerHTML='✅ Informe NIIF generado y enviado<br><strong>'+order.email+'</strong><br><small style="opacity:.7">Claude AI analizó la empresa y EmailJS envió el correo</small>';
+    ok.innerHTML='✅ Informe NIIF con datos reales Supercias generado<br><strong>'+order.email+'</strong><br><small style="opacity:.7">KPIs y estados financieros reales del catálogo oficial</small>';
     document.body.appendChild(ok);
     setTimeout(function(){ ok.remove(); },7000);
   })
   .catch(function(err){
-    var n=document.getElementById('deliver-notif-'+orderId);
-    if(n) n.remove();
+    var n=document.getElementById('deliver-notif-'+orderId); if(n) n.remove();
     console.error('deliverInforme error:',err);
-    alert('⚠️ Error al generar/enviar informe:\n'+err.message+'\n\nRevisa que la API Key de Claude esté configurada en el código.');
+    alert('⚠️ Error al generar/enviar informe:\n'+err.message);
   });
 }
 

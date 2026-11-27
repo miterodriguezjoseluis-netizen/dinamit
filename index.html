@@ -3411,7 +3411,7 @@ function showPaySuccess(order){
     +'<div style="background:rgba(29,158,117,.12);border:1px solid rgba(29,158,117,.35);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:rgba(255,255,255,.8)">'
     +'📧 <strong>'+order.email+'</strong><br><span style="font-size:10.5px;color:rgba(255,255,255,.55)">Ahí recibirás el PDF de forma automática</span></div>'
     +'<div style="font-size:11.5px;color:rgba(255,255,255,.65);margin-bottom:14px;line-height:1.6">Una vez confirmado el pago, recibirás tu informe <strong style="color:#1D9E75">automáticamente en tu email</strong> generado por inteligencia artificial.</div>'
-    +'<a id="wa-notify-btn" href="#" target="_blank" rel="noopener noreferrer" onclick="this.href=window._waNotifyUrl||'#'" style="display:inline-block;background:#25D366;color:#fff;border:none;border-radius:8px;padding:11px 20px;cursor:pointer;font-size:13px;font-weight:700;text-decoration:none;margin-bottom:10px;width:100%;box-sizing:border-box">📲 Notificar pago por WhatsApp</a>'    +'<br>'    +'<button onclick="closePayModal()" style="background:linear-gradient(135deg,#1D9E75,#15785a);color:#fff;border:none;border-radius:8px;padding:11px 28px;cursor:pointer;font-size:13px;font-weight:700">Entendido</button>'
+    +'<a id="wa-notify-btn" href="#" target="_blank" rel="noopener noreferrer" onclick="this.href=window._waNotifyUrl||\'#\'" style="display:inline-block;background:#25D366;color:#fff;border:none;border-radius:8px;padding:11px 20px;cursor:pointer;font-size:13px;font-weight:700;text-decoration:none;margin-bottom:10px;width:100%;box-sizing:border-box">📲 Notificar pago por WhatsApp</a>'+'<br>'+'<button onclick="closePayModal()" style="background:linear-gradient(135deg,#1D9E75,#15785a);color:#fff;border:none;border-radius:8px;padding:11px 28px;cursor:pointer;font-size:13px;font-weight:700">Entendido</button>'
     +'</div>';
   bg.style.display='flex';
   bg.style.alignItems='center';
@@ -4490,8 +4490,7 @@ function deliverInformeAutomatico(orderId, order){
       +'<div style="padding:16px 32px;background:#f9f9f9;border-top:1px solid #eee;font-size:11px;color:#999;text-align:center">'
       +'¿Consultas? WhatsApp: <strong>0980379867</strong> · Ing. José Mite Rodríguez CPA<br>'
       +'Generado el '+fecha+' · DINAMIT · RUC 0924158656001'
-      +'</div></div>
-</body></html>';
+      +'</div></div></body></html>';
 
     /* Enviar via EmailJS */
     return emailjs.send('service_c6ew6z4','um2n5m6',{

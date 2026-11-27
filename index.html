@@ -4434,20 +4434,63 @@ function deliverInformeAutomatico(orderId, order){
   notif.innerHTML='⏳ Generando informe NIIF con Claude AI para<br><strong>'+order.empresa+'</strong>...<br><small style="opacity:.7">Esto toma unos segundos</small>';
   document.body.appendChild(notif);
 
-  var prompt='Eres un analista financiero experto en NIIF y el mercado ecuatoriano. '
-    +'Genera un informe ejecutivo profesional para:\n\n'
+  var prompt='Eres DINAMIT, sistema experto de análisis financiero NIIF para Ecuador. '
+    +'Genera un informe financiero completo y profesional para el siguiente cliente que acaba de confirmar su pago:\n\n'
     +'EMPRESA: '+order.empresa+'\n'
     +'RUC: '+order.ruc+'\n'
-    +'PERÍODO: '+año+'\n\n'
-    +'El informe debe incluir:\n'
-    +'1. RESUMEN EJECUTIVO (sector, actividad según RUC, contexto Ecuador)\n'
-    +'2. INDICADORES NIIF CLAVE (liquidez, endeudamiento, ROE, ROA con valores referenciales del sector)\n'
-    +'3. ESTADOS FINANCIEROS - estructura típica del sector\n'
-    +'4. NORMAS NIIF APLICABLES (NIC 1, preparación para NIIF 18 vigente 2027: EBIT y MPM)\n'
-    +'5. RECOMENDACIONES EJECUTIVAS (5 puntos accionables)\n'
-    +'6. CONCLUSIÓN\n\n'
-    +'Formato profesional en español, datos específicos del sector ecuatoriano, '
-    +'menciona Superintendencia de Compañías Ecuador. 600-800 palabras.';
+    +'PERÍODO ANALIZADO: '+año+'\n\n'
+    +'El informe DEBE incluir exactamente estas 6 secciones con este formato:\n\n'
+    +'═══════════════════════════════════════\n'
+    +'1. ESTADO DE SITUACIÓN FINANCIERA (ESF) — NIC 1\n'
+    +'═══════════════════════════════════════\n'
+    +'Presenta una estructura típica del ESF para el sector de esta empresa según su RUC ecuatoriano:\n'
+    +'- ACTIVOS: Activo Corriente (Efectivo, Cuentas por cobrar, Inventarios) y Activo No Corriente (PPE, Intangibles)\n'
+    +'- PASIVOS: Pasivo Corriente (Proveedores, Deudas corto plazo) y Pasivo No Corriente\n'
+    +'- PATRIMONIO: Capital suscrito, Reservas, Resultados acumulados\n'
+    +'Incluye valores referenciales en USD para el sector en Ecuador.\n\n'
+    +'═══════════════════════════════════════\n'
+    +'2. ESTADO DE RESULTADOS INTEGRAL (ERI) — NIC 1 / NIIF 18\n'
+    +'═══════════════════════════════════════\n'
+    +'- Ingresos de actividades ordinarias\n'
+    +'- Costo de ventas → Utilidad Bruta\n'
+    +'- Gastos operacionales → EBIT (Resultado Operacional)\n'
+    +'- Gastos financieros → EBT\n'
+    +'- Impuesto a la Renta (25% Ecuador) → Utilidad Neta\n'
+    +'- Nota: preparación para NIIF 18 (vigente 2027) con categorías MPM\n\n'
+    +'═══════════════════════════════════════\n'
+    +'3. 17 RATIOS NIIF CON SEMÁFORO\n'
+    +'═══════════════════════════════════════\n'
+    +'Calcula y presenta con semáforo (🟢 Óptimo / 🟡 Precaución / 🔴 Alerta):\n'
+    +'LIQUIDEZ: Razón Corriente | Prueba Ácida | Capital de Trabajo\n'
+    +'ENDEUDAMIENTO: Deuda/Patrimonio | Deuda/Activos | Cobertura Intereses\n'
+    +'RENTABILIDAD: ROE | ROA | Margen Bruto | Margen Neto | EBITDA/Ventas\n'
+    +'EFICIENCIA: Rotación Activos | Rotación CxC | Rotación Inventarios | Días de Cobro | Días de Pago\n'
+    +'VALOR: EVA estimado\n\n'
+    +'═══════════════════════════════════════\n'
+    +'4. COMPARATIVO SECTORIAL (Supercias Ecuador)\n'
+    +'═══════════════════════════════════════\n'
+    +'Basado en el catálogo oficial Superintendencia de Compañías Ecuador (151,674 empresas registradas):\n'
+    +'- Sector y CIIU de la empresa según RUC\n'
+    +'- Comparar sus ratios vs. mediana del sector en Ecuador\n'
+    +'- Posición competitiva: percentil estimado en el sector\n'
+    +'- Benchmarks del sector (ROE promedio, margen neto promedio, liquidez promedio)\n\n'
+    +'═══════════════════════════════════════\n'
+    +'5. NORMAS NIIF APLICABLES\n'
+    +'═══════════════════════════════════════\n'
+    +'- NIC 1: Presentación de estados financieros (vigente)\n'
+    +'- NIIF 15: Reconocimiento de ingresos aplicable al sector\n'
+    +'- NIIF 16: Arrendamientos si aplica\n'
+    +'- NIIF 18: Presentación e información a revelar (vigente 2027) — impacto en MPM y EBIT\n'
+    +'- Catálogo de cuentas Supercias: códigos relevantes para el sector\n\n'
+    +'═══════════════════════════════════════\n'
+    +'6. RECOMENDACIONES EJECUTIVAS Y CONCLUSIÓN\n'
+    +'═══════════════════════════════════════\n'
+    +'- 5 recomendaciones accionables priorizadas para mejorar la situación financiera\n'
+    +'- Conclusión ejecutiva en 3 líneas\n'
+    +'- Próximos pasos sugeridos\n\n'
+    +'IMPORTANTE: Redacta en español profesional. Usa datos referenciales reales del sector ecuatoriano. '
+    +'Menciona la Superintendencia de Compañías, Valores y Seguros del Ecuador. '
+    +'Este informe es para uso ejecutivo directo del cliente. Extensión: 1000-1200 palabras.';
 
   /* Llamar Claude API vía Cloudflare Worker proxy (evita CORS) */
   fetch('https://dinamit-claude-proxy.miterodriguezjoseluis.workers.dev',{
@@ -4457,7 +4500,7 @@ function deliverInformeAutomatico(orderId, order){
     },
     body:JSON.stringify({
       model:'claude-haiku-4-5-20251001',
-      max_tokens:1500,
+      max_tokens:3000,
       messages:[{role:'user',content:prompt}]
     })
   })
@@ -4503,7 +4546,7 @@ function deliverInformeAutomatico(orderId, order){
       +'Generado el '+fecha+' · DINAMIT · RUC 0924158656001'
       +'</div></div></body></html>';
 
-    /* Enviar via EmailJS */
+    /* Enviar via EmailJS — incluir informe completo en el body */
     return emailjs.send('service_c6ew6z4','template_wvkmk7h',{
       to_email:  order.email,
       to_name:   order.empresa,
@@ -4513,7 +4556,9 @@ function deliverInformeAutomatico(orderId, order){
       metodo:    order.method||'transferencia',
       pedido_id: orderId||'N/A',
       name:      order.empresa,
-      email:     order.email
+      email:     order.email,
+      message:   analisis,
+      informe_html: htmlInforme
     });
   })
   .then(function(){

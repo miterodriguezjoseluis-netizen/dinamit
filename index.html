@@ -1303,6 +1303,212 @@ async function preloadData(){
   await Promise.all(fetches);
 }
 
+/* ── INFORME PÚBLICO: detectar ?informe=ID y renderizar dashboard ── */
+(function(){
+  var params=new URLSearchParams(window.location.search);
+  var informeId=params.get('informe');
+  if(!informeId) return; /* ruta normal de la app */
+
+  /* Ocultar toda la app y mostrar dashboard de informe */
+  document.addEventListener('DOMContentLoaded',function(){
+    var body=document.body;
+    body.innerHTML='<div id="inf-loading" style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#0C1A2E;font-family:Arial,sans-serif"><div style="text-align:center"><div style="color:#1D9E75;font-size:32px;font-weight:800;letter-spacing:2px">⚡ DINAMIT</div><div style="color:rgba(255,255,255,.5);margin-top:8px;font-size:14px">Cargando informe financiero...</div><div style="margin-top:24px;width:48px;height:48px;border:4px solid rgba(29,158,117,.2);border-top-color:#1D9E75;border-radius:50%;animation:spin 1s linear infinite;margin-left:auto;margin-right:auto"></div></div><style>@keyframes spin{to{transform:rotate(360deg)}}</style></div>';
+
+    /* Cargar Firebase si no está listo */
+    function waitFirebase(cb){
+      if(typeof firebase!=='undefined'&&firebase.apps&&firebase.apps.length) return cb();
+      var t=0;
+      var iv=setInterval(function(){
+        t+=200; if(typeof firebase!=='undefined'&&firebase.apps&&firebase.apps.length){ clearInterval(iv); cb(); }
+        if(t>8000){ clearInterval(iv); renderInformeError('No se pudo conectar a la base de datos.'); }
+      },200);
+    }
+
+    waitFirebase(function(){
+      firebase.firestore().collection('dinamit_informes').doc(informeId).get()
+        .then(function(doc){
+          if(!doc.exists){ renderInformeError('Informe no encontrado. Verifica el link.'); return; }
+          renderInformeDashboard(doc.data(), informeId);
+        })
+        .catch(function(e){ renderInformeError('Error al cargar informe: '+e.message); });
+    });
+  });
+
+  function renderInformeError(msg){
+    document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#0C1A2E;font-family:Arial,sans-serif"><div style="text-align:center;color:#fff"><div style="font-size:48px;margin-bottom:16px">⚠️</div><div style="font-size:18px;font-weight:700">'+msg+'</div><div style="margin-top:24px"><a href="https://miterodriguezjoseluis-netizen.github.io/dinamit/" style="background:#1D9E75;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700">Ir a DINAMIT</a></div></div></div>';
+  }
+
+  function renderInformeDashboard(data, id){
+    var analisis=data.analisis||'';
+    var empresa=data.empresa||'';
+    var ruc=data.ruc||'';
+    var año=data.año||'';
+    var fecha=data.fecha ? new Date(data.fecha).toLocaleDateString('es-EC',{day:'2-digit',month:'long',year:'numeric'}) : '';
+
+    /* Parsear ratios del texto generado por Claude */
+    var ratios=[];
+    var regRatio=/([A-Za-záéíóúÁÉÍÓÚñÑ \/]+)[\s:]+([0-9.,]+[x%]?)\s*(🟢|🟡|🔴)/g;
+    var m;
+    while((m=regRatio.exec(analisis))!==null){
+      ratios.push({nombre:m[1].trim(),valor:m[2].trim(),semaforo:m[3]});
+      if(ratios.length>=17) break;
+    }
+
+    /* Convertir markdown a HTML */
+    function md2html(txt){
+      return txt
+        .replace(/═{3,}/g,'<hr style="border:none;border-top:2px solid #1D9E75;margin:20px 0">')
+        .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')
+        .replace(/^#{1,3}\s+(.+)$/gm,'<h3 style="color:#0C1A2E;font-size:16px;margin:20px 0 8px;border-left:4px solid #1D9E75;padding-left:10px">$1</h3>')
+        .replace(/^-\s+(.+)$/gm,'<div style="padding:4px 0 4px 18px;border-bottom:1px solid #f0f0f0">▸ $1</div>')
+        .replace(/\n\n/g,'<br>').replace(/\n/g,'<br>');
+    }
+
+    /* Colores semáforo */
+    function sColor(s){ return s==='🟢'?'#1D9E75':s==='🟡'?'#F59E0B':'#EF4444'; }
+    function sBg(s){ return s==='🟢'?'rgba(29,158,117,.1)':s==='🟡'?'rgba(245,158,11,.1)':'rgba(239,68,68,.1)'; }
+
+    /* Dividir informe en secciones por ═══ */
+    var secciones=analisis.split(/═{3,}[^═]*═{3,}/);
+    var titulos=[];
+    var tt=analisis.match(/═{3,}([^═\n]+)═{3,}/g)||[];
+    tt.forEach(function(t){ titulos.push(t.replace(/═/g,'').trim()); });
+
+    var ratiosHTML='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-top:16px">';
+    if(ratios.length>0){
+      ratios.forEach(function(r){
+        ratiosHTML+='<div style="background:'+sBg(r.semaforo)+';border:1px solid '+sColor(r.semaforo)+';border-radius:10px;padding:14px;text-align:center">'
+          +'<div style="font-size:22px">'+r.semaforo+'</div>'
+          +'<div style="font-size:18px;font-weight:800;color:'+sColor(r.semaforo)+';margin:4px 0">'+r.valor+'</div>'
+          +'<div style="font-size:11px;color:#666;line-height:1.3">'+r.nombre+'</div>'
+          +'</div>';
+      });
+    } else {
+      ratiosHTML+='<div style="grid-column:1/-1;color:#666;font-size:13px;padding:10px">Los ratios se muestran en el texto del informe.</div>';
+    }
+    ratiosHTML+='</div>';
+
+    var html='<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+      +'<title>Informe NIIF '+empresa+' | DINAMIT</title>'
+      +'<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>'
+      +'<style>'
+      +'*{box-sizing:border-box;margin:0;padding:0}'
+      +'body{font-family:Arial,sans-serif;background:#f0f4f8;color:#333}'
+      +'.topbar{background:#0C1A2E;padding:16px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(0,0,0,.3)}'
+      +'.logo{color:#1D9E75;font-size:22px;font-weight:800;letter-spacing:1px}'
+      +'.logo span{color:rgba(255,255,255,.5);font-size:12px;font-weight:400;margin-left:8px}'
+      +'.btn-pdf{background:#1D9E75;color:#fff;border:none;padding:10px 22px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:opacity .2s}'
+      +'.btn-pdf:hover{opacity:.85}'
+      +'.container{max-width:960px;margin:0 auto;padding:24px 16px}'
+      +'.hero{background:linear-gradient(135deg,#0C1A2E 0%,#1a3a5c 100%);border-radius:16px;padding:32px;margin-bottom:24px;position:relative;overflow:hidden}'
+      +'.hero::after{content:"";position:absolute;right:-40px;top:-40px;width:200px;height:200px;background:rgba(29,158,117,.1);border-radius:50%}'
+      +'.badge{display:inline-block;background:rgba(29,158,117,.2);border:1px solid #1D9E75;color:#1D9E75;font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;margin-bottom:12px}'
+      +'.hero-empresa{color:#fff;font-size:28px;font-weight:800;margin-bottom:4px}'
+      +'.hero-sub{color:rgba(255,255,255,.55);font-size:14px}'
+      +'.hero-meta{display:flex;gap:24px;margin-top:20px;flex-wrap:wrap}'
+      +'.hero-meta-item{color:rgba(255,255,255,.7);font-size:13px}'
+      +'.hero-meta-item strong{color:#1D9E75;display:block;font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px}'
+      +'.card{background:#fff;border-radius:14px;padding:24px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,.06)}'
+      +'.card-title{font-size:15px;font-weight:800;color:#0C1A2E;margin-bottom:16px;display:flex;align-items:center;gap:8px;border-bottom:2px solid #f0f0f0;padding-bottom:12px}'
+      +'.section-tab{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}'
+      +'.tab-btn{background:#f0f4f8;border:none;padding:8px 16px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;color:#666;transition:all .2s}'
+      +'.tab-btn.active{background:#0C1A2E;color:#1D9E75}'
+      +'.sec-content{font-size:13.5px;line-height:1.75;color:#333}'
+      +'.footer{text-align:center;padding:32px 16px;color:#999;font-size:12px}'
+      +'@media print{.topbar .btn-pdf{display:none}.no-print{display:none}}'
+      +'@media(max-width:600px){.hero-empresa{font-size:20px}.hero-meta{gap:12px}}'
+      +'<\/style></head><body>'
+
+      /* TOP BAR */
+      +'<div class="topbar no-print">'
+      +'<div class="logo">⚡ DINAMIT<span>Sistema de Análisis Financiero NIIF · Ecuador</span></div>'
+      +'<button class="btn-pdf" onclick="descargarPDF()">⬇ Descargar PDF</button>'
+      +'</div>'
+
+      /* HERO */
+      +'<div class="container" id="informe-body">'
+      +'<div class="hero">'
+      +'<div class="badge">✅ INFORME GENERADO CON IA · PAGO CONFIRMADO</div>'
+      +'<div class="hero-empresa">'+empresa+'</div>'
+      +'<div class="hero-sub">Informe Financiero Integral NIIF — Período '+año+'</div>'
+      +'<div class="hero-meta">'
+      +'<div class="hero-meta-item"><strong>RUC</strong>'+ruc+'</div>'
+      +'<div class="hero-meta-item"><strong>Período</strong>'+año+'</div>'
+      +'<div class="hero-meta-item"><strong>Generado</strong>'+fecha+'</div>'
+      +'<div class="hero-meta-item"><strong>Norma</strong>NIIF / NIC · Ecuador</div>'
+      +'</div></div>'
+
+      /* RATIOS SEMÁFORO */
+      +'<div class="card">'
+      +'<div class="card-title">🚦 Ratios NIIF con Semáforo</div>'
+      +ratiosHTML
+      +'</div>'
+
+      /* INFORME COMPLETO CON TABS */
+      +'<div class="card">'
+      +'<div class="card-title">📄 Informe Financiero Completo</div>'
+      +'<div class="section-tab" id="sec-tabs"></div>'
+      +'<div class="sec-content" id="sec-content"></div>'
+      +'</div>'
+
+      /* FOOTER */
+      +'<div class="footer">Generado el '+fecha+' · DINAMIT · Sistema Experto NIIF Ecuador<br>⚡ Ing. José Luis Mite Rodríguez CPA · RUC 0924158656001 · WhatsApp 0980379867</div>'
+      +'</div>'
+
+      /* SCRIPT: tabs + PDF */
+      +'<script>'
+      +'var _secciones='+JSON.stringify(secciones)+';'
+      +'var _titulos='+JSON.stringify(titulos.length>0?titulos:['Informe Completo'])+';'
+      +'var _analisis='+JSON.stringify(analisis)+';'
+      +'function md2html(txt){'
+      +'return txt.replace(/═{3,}/g,"<hr style=\'border:none;border-top:2px solid #1D9E75;margin:16px 0\'>").replace(/\\*\\*(.*?)\\*\\*/g,"<strong>$1</strong>").replace(/^#{1,3}\\s+(.+)$/gm,"<h3 style=\'color:#0C1A2E;font-size:15px;margin:16px 0 8px;border-left:4px solid #1D9E75;padding-left:10px\'>$1</h3>").replace(/^-\\s+(.+)$/gm,"<div style=\'padding:4px 0 4px 16px;border-bottom:1px solid #f5f5f5\'>▸ $1</div>").replace(/\\n\\n/g,"<br>").replace(/\\n/g,"<br>");'
+      +'}'
+      +'function showSec(i){'
+      +'document.querySelectorAll(".tab-btn").forEach(function(b,j){b.classList.toggle("active",i===j)});'
+      +'document.getElementById("sec-content").innerHTML=md2html(_secciones[i]||_analisis);'
+      +'}'
+      +'window.addEventListener("DOMContentLoaded",function(){'
+      +'var tabs=document.getElementById("sec-tabs");'
+      +'var labels=_titulos.length>1?_titulos:["Informe Completo"];'
+      +'if(_secciones.length<=1){tabs.style.display="none";document.getElementById("sec-content").innerHTML=md2html(_analisis);return;}'
+      +'labels.forEach(function(t,i){'
+      +'var b=document.createElement("button");b.className="tab-btn"+(i===0?" active":"");'
+      +'b.textContent=(i+1)+". "+(t.substring(0,30));'
+      +'b.onclick=function(){showSec(i)};tabs.appendChild(b);});'
+      +'showSec(0);'
+      +'});'
+      +'function descargarPDF(){'
+      +'if(typeof jspdf==="undefined"&&typeof window.jspdf==="undefined"){alert("Preparando PDF... intenta en un momento");return;}'
+      +'var jsPDF=window.jspdf.jsPDF;'
+      +'var doc=new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});'
+      +'var pageW=doc.internal.pageSize.getWidth();'
+      +'var margin=18;var lineH=6;var y=margin;'
+      +'/* Header */doc.setFillColor(12,26,46);doc.rect(0,0,pageW,28,\'F\');'
+      +'doc.setTextColor(29,158,117);doc.setFontSize(18);doc.setFont("helvetica","bold");doc.text("⚡ DINAMIT",margin,16);'
+      +'doc.setTextColor(255,255,255);doc.setFontSize(9);doc.setFont("helvetica","normal");doc.text("Sistema de Análisis Financiero NIIF · Ecuador",margin,22);'
+      +'y=38;'
+      +'/* Empresa */doc.setTextColor(12,26,46);doc.setFontSize(16);doc.setFont("helvetica","bold");doc.text('+JSON.stringify(empresa)+',margin,y);y+=8;'
+      +'doc.setFontSize(10);doc.setFont("helvetica","normal");doc.setTextColor(100,100,100);doc.text("RUC: '+ruc+' · Período: '+año+' · Generado: '+fecha+'",margin,y);y+=10;'
+      +'/* Línea */doc.setDrawColor(29,158,117);doc.setLineWidth(.5);doc.line(margin,y,pageW-margin,y);y+=8;'
+      +'/* Texto del informe */var lineas=_analisis.replace(/═{3,}/g,"────────────────────────").replace(/\\*\\*(.*?)\\*\\*/g,"$1").split("\\n");'
+      +'doc.setFontSize(9);doc.setTextColor(50,50,50);'
+      +'lineas.forEach(function(l){'
+      +'if(y>275){doc.addPage();y=margin;}'
+      +'var wrapped=doc.splitTextToSize(l||" ",pageW-margin*2);'
+      +'wrapped.forEach(function(wl){if(y>275){doc.addPage();y=margin;}doc.text(wl,margin,y);y+=lineH;});'
+      +'});'
+      +'/* Footer */doc.setFontSize(8);doc.setTextColor(150,150,150);doc.text("DINAMIT · Ing. José Luis Mite Rodríguez CPA · RUC 0924158656001",margin,285);'
+      +'doc.save("DINAMIT_Informe_NIIF_'+empresa.replace(/\s+/g,'_')+'_'+año+'.pdf");'
+      +'}'
+      +'<\/script>'
+      +'</body></html>';
+
+    document.open();
+    document.write(html);
+    document.close();
+  }
+})();
+
 async function loadAll(){
   try{
     document.getElementById('prog-lbl').textContent='Cargando datos...';
@@ -4510,6 +4716,21 @@ function deliverInformeAutomatico(orderId, order){
       throw new Error(data.error?data.error.message:'Claude no respondió');
     }
     var analisis=data.content[0].text;
+    var informeId=orderId; /* usar el ID de la orden como ID del informe */
+
+    /* Guardar informe completo en Firestore para página pública */
+    var linkInforme='https://miterodriguezjoseluis-netizen.github.io/dinamit/?informe='+informeId;
+    if(typeof firebase!=='undefined'&&firebase.apps&&firebase.apps.length){
+      firebase.firestore().collection('dinamit_informes').doc(informeId).set({
+        empresa:  order.empresa,
+        ruc:      order.ruc,
+        email:    order.email,
+        año:      año,
+        analisis: analisis,
+        fecha:    new Date().toISOString(),
+        orderId:  orderId
+      }).catch(function(e){ console.warn('No se pudo guardar informe en Firestore:',e); });
+    }
 
     /* Notificación intermedia */
     notif.innerHTML='✅ Análisis generado. Enviando email a <strong>'+order.email+'</strong>...';
@@ -4538,16 +4759,20 @@ function deliverInformeAutomatico(orderId, order){
       +'</div>'
       +'<div style="padding:0 32px 32px;font-size:13.5px;line-height:1.75;color:#333">'+analisisHTML+'</div>'
       +'<div style="background:#0C1A2E;border-radius:12px;padding:22px;text-align:center;margin:0 32px 28px">'
-      +'<div style="color:#fff;font-size:14px;font-weight:700;margin-bottom:8px">📊 Accede al análisis interactivo completo</div>'
-      +'<a href="https://capable-chimera-ec79bf.netlify.app" style="display:inline-block;background:#1D9E75;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px">Abrir DINAMIT →</a>'
+      +'<div style="color:#fff;font-size:14px;font-weight:700;margin-bottom:8px">📊 Ver informe completo con descarga PDF</div>'
+      +'<a href="'+linkInforme+'" style="display:inline-block;background:#1D9E75;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px;margin-right:10px">Ver mi Informe →</a>'
       +'</div>'
       +'<div style="padding:16px 32px;background:#f9f9f9;border-top:1px solid #eee;font-size:11px;color:#999;text-align:center">'
       +'¿Consultas? WhatsApp: <strong>0980379867</strong> · Ing. José Mite Rodríguez CPA<br>'
       +'Generado el '+fecha+' · DINAMIT · RUC 0924158656001'
       +'</div></div></body></html>';
 
+    /* Agregar link al inicio del informe */
+    var linkTexto='\n\n🔗 VER INFORME COMPLETO + DESCARGA PDF:\n'+linkInforme+'\n\n';
+    var analisisConLink=linkTexto+analisis;
+
     /* Dividir informe en secciones para evitar límite EmailJS */
-    var partes=analisis.split(/(?=═{3,})/);
+    var partes=analisisConLink.split(/(?=═{3,})/);
     var s1=partes[0]||'';
     var s2=partes[1]||'';
     var s3=partes[2]||'';

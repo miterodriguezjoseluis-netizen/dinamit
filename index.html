@@ -1345,163 +1345,286 @@ async function preloadData(){
     var año=data.año||'';
     var fecha=data.fecha ? new Date(data.fecha).toLocaleDateString('es-EC',{day:'2-digit',month:'long',year:'numeric'}) : '';
 
-    /* Parsear ratios del texto generado por Claude */
+    /* ── PARSEAR RATIOS ── */
     var ratios=[];
-    var regRatio=/([A-Za-záéíóúÁÉÍÓÚñÑ \/]+)[\s:]+([0-9.,]+[x%]?)\s*(🟢|🟡|🔴)/g;
+    var regRatio=/\|\s*([A-Za-záéíóúÁÉÍÓÚñÑ\s\/]+?)\s*\|\s*[^|]*\|\s*([0-9.,]+\s*[x%veces]*)\s*\|\s*[^|]*\|\s*(🟢|🟡|🔴)/g;
     var m;
     while((m=regRatio.exec(analisis))!==null){
-      ratios.push({nombre:m[1].trim(),valor:m[2].trim(),semaforo:m[3]});
+      var nom=m[1].trim(); if(nom.length<3||nom==='RATIO'||nom==='LIQUIDEZ'||nom==='RENTABILIDAD'||nom==='ENDEUDAMIENTO'||nom==='EFICIENCIA'||nom==='VALOR') continue;
+      ratios.push({nombre:nom,valor:m[2].trim(),semaforo:m[3]});
       if(ratios.length>=17) break;
     }
-
-    /* Convertir markdown a HTML */
-    function md2html(txt){
-      return txt
-        .replace(/═{3,}/g,'<hr style="border:none;border-top:2px solid #1D9E75;margin:20px 0">')
-        .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')
-        .replace(/^#{1,3}\s+(.+)$/gm,'<h3 style="color:#0C1A2E;font-size:16px;margin:20px 0 8px;border-left:4px solid #1D9E75;padding-left:10px">$1</h3>')
-        .replace(/^-\s+(.+)$/gm,'<div style="padding:4px 0 4px 18px;border-bottom:1px solid #f0f0f0">▸ $1</div>')
-        .replace(/\n\n/g,'<br>').replace(/\n/g,'<br>');
+    /* fallback regex más simple */
+    if(ratios.length===0){
+      var reg2=/([A-Za-záéíóúÁÉÍÓÚñÑ \/]{4,30})\s*[\|:]\s*([0-9.,]+\s*[x%]?)\s*(🟢|🟡|🔴)/g;
+      while((m=reg2.exec(analisis))!==null){
+        ratios.push({nombre:m[1].trim(),valor:m[2].trim(),semaforo:m[3]});
+        if(ratios.length>=17) break;
+      }
     }
 
-    /* Colores semáforo */
+    /* ── PARSEAR KPIs CLAVE del ERI ── */
+    function extraerUSD(patron){
+      var r=new RegExp(patron+'[\\s\\S]{0,60}?([\\$]?[\\s]?[0-9][0-9.,]{2,}(?:\\s*(?:USD|millones)?))','i');
+      var mm=analisis.match(r); return mm?mm[1].replace(/[^0-9.,]/g,'').trim():'—';
+    }
+    var ventas=extraerUSD('Ingresos de actividades ordinarias|TOTAL INGRESOS');
+    var utilNeta=extraerUSD('UTILIDAD NETA DEL EJERCICIO|Utilidad Neta');
+    var ebitda=extraerUSD('EBITDA');
+    var totalActivos=extraerUSD('TOTAL ACTIVOS');
+
+    /* ── PARSEAR TABLAS MARKDOWN → HTML ── */
+    function parseMdTable(txt){
+      var lines=txt.split('\n');
+      var inTable=false; var html=''; var rows=[];
+      lines.forEach(function(l){
+        if(/^\|/.test(l.trim())){
+          if(/^[\|\s\-:]+$/.test(l.trim())){return;} /* separador */
+          inTable=true;
+          var cells=l.trim().replace(/^\||\|$/g,'').split('|').map(function(c){return c.trim();});
+          rows.push(cells);
+        } else {
+          if(inTable&&rows.length){
+            html+='<div style="overflow-x:auto;margin:12px 0"><table style="width:100%;border-collapse:collapse;font-size:12.5px">';
+            rows.forEach(function(row,ri){
+              html+='<tr style="background:'+(ri===0?'#0C1A2E':ri%2===0?'#f8fafc':'#fff')+'">';
+              row.forEach(function(cell){
+                var tag=ri===0?'th':'td';
+                html+='<'+tag+' style="padding:8px 10px;text-align:left;border-bottom:1px solid #e8ecf0;color:'+(ri===0?'#1D9E75':'#333')+';font-weight:'+(ri===0?'700':'400')+'">'+cell+'<\/'+tag+'>';
+              });
+              html+='<\/tr>';
+            });
+            html+='<\/table><\/div>';
+            rows=[]; inTable=false;
+          }
+          html+=procesarLinea(l)+'\n';
+        }
+      });
+      if(inTable&&rows.length){
+        html+='<div style="overflow-x:auto;margin:12px 0"><table style="width:100%;border-collapse:collapse;font-size:12.5px">';
+        rows.forEach(function(row,ri){
+          html+='<tr style="background:'+(ri===0?'#0C1A2E':ri%2===0?'#f8fafc':'#fff')+'">';
+          row.forEach(function(cell){
+            var tag=ri===0?'th':'td';
+            html+='<'+tag+' style="padding:8px 10px;text-align:left;border-bottom:1px solid #e8ecf0;color:'+(ri===0?'#1D9E75':'#333')+';font-weight:'+(ri===0?'700':'400')+'">'+cell+'<\/'+tag+'>';
+          });
+          html+='<\/tr>';
+        });
+        html+='<\/table><\/div>';
+      }
+      return html;
+    }
+    function procesarLinea(l){
+      l=l.replace(/═{3,}/g,'<div style="height:3px;background:linear-gradient(90deg,#1D9E75,transparent);margin:16px 0;border-radius:2px"><\/div>');
+      l=l.replace(/^#{1,2}\s+(.+)$/,'<h2 style="color:#0C1A2E;font-size:15px;font-weight:800;margin:20px 0 8px;padding:10px 14px;background:#f0faf6;border-left:4px solid #1D9E75;border-radius:0 8px 8px 0">$1<\/h2>');
+      l=l.replace(/^###\s+(.+)$/,'<h3 style="color:#1D9E75;font-size:13px;font-weight:700;margin:14px 0 6px;text-transform:uppercase;letter-spacing:.5px">$1<\/h3>');
+      l=l.replace(/\*\*(.*?)\*\*/g,'<strong>$1<\/strong>');
+      l=l.replace(/^-\s+(.+)$/,'<div style="padding:5px 0 5px 16px;border-bottom:1px solid #f0f0f0;font-size:13px">▸ $1<\/div>');
+      l=l.replace(/^---+$/,'<hr style="border:none;border-top:1px solid #e0e0e0;margin:12px 0">');
+      return l;
+    }
+    function md2htmlFull(txt){
+      return parseMdTable(txt);
+    }
+
+    /* ── DIVIDIR EN SECCIONES ── */
+    var bloques=analisis.split(/(?=═{10,}[\s\S]{0,80}═{10,})/);
+    var SECS=['ESF','ERI','RATIOS','SECTORIAL','NIIF','RECOMENDACIONES'];
+    var ICONS=['🏦','📊','🚦','🌐','📋','💡'];
+    if(bloques.length<2) bloques=[analisis];
+
+    /* ── COLORES SEMÁFORO ── */
     function sColor(s){ return s==='🟢'?'#1D9E75':s==='🟡'?'#F59E0B':'#EF4444'; }
-    function sBg(s){ return s==='🟢'?'rgba(29,158,117,.1)':s==='🟡'?'rgba(245,158,11,.1)':'rgba(239,68,68,.1)'; }
+    function sBg(s){ return s==='🟢'?'#f0faf6':s==='🟡'?'#fffbeb':'#fff5f5'; }
+    function sBorder(s){ return s==='🟢'?'#1D9E75':s==='🟡'?'#F59E0B':'#EF4444'; }
+    function sLabel(s){ return s==='🟢'?'ÓPTIMO':s==='🟡'?'PRECAUCIÓN':'ALERTA'; }
 
-    /* Dividir informe en secciones por ═══ */
-    var secciones=analisis.split(/═{3,}[^═]*═{3,}/);
-    var titulos=[];
-    var tt=analisis.match(/═{3,}([^═\n]+)═{3,}/g)||[];
-    tt.forEach(function(t){ titulos.push(t.replace(/═/g,'').trim()); });
-
-    var ratiosHTML='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-top:16px">';
+    /* ── RATIOS HTML ── */
+    var ratiosGrid='';
     if(ratios.length>0){
       ratios.forEach(function(r){
-        ratiosHTML+='<div style="background:'+sBg(r.semaforo)+';border:1px solid '+sColor(r.semaforo)+';border-radius:10px;padding:14px;text-align:center">'
-          +'<div style="font-size:22px">'+r.semaforo+'</div>'
-          +'<div style="font-size:18px;font-weight:800;color:'+sColor(r.semaforo)+';margin:4px 0">'+r.valor+'</div>'
-          +'<div style="font-size:11px;color:#666;line-height:1.3">'+r.nombre+'</div>'
-          +'</div>';
+        ratiosGrid+='<div style="background:'+sBg(r.semaforo)+';border:1.5px solid '+sBorder(r.semaforo)+';border-radius:12px;padding:16px 12px;text-align:center;position:relative">'
+          +'<div style="position:absolute;top:8px;right:10px;font-size:9px;font-weight:700;color:'+sColor(r.semaforo)+';background:'+sBg(r.semaforo)+';padding:2px 6px;border-radius:10px;border:1px solid '+sBorder(r.semaforo)+'">'+sLabel(r.semaforo)+'<\/div>'
+          +'<div style="font-size:24px;margin-bottom:4px">'+r.semaforo+'<\/div>'
+          +'<div style="font-size:22px;font-weight:800;color:'+sColor(r.semaforo)+';line-height:1">'+r.valor+'<\/div>'
+          +'<div style="font-size:11px;color:#555;margin-top:6px;line-height:1.3;font-weight:600">'+r.nombre+'<\/div>'
+          +'<\/div>';
       });
-    } else {
-      ratiosHTML+='<div style="grid-column:1/-1;color:#666;font-size:13px;padding:10px">Los ratios se muestran en el texto del informe.</div>';
     }
-    ratiosHTML+='</div>';
 
-    var html='<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
-      +'<title>Informe NIIF '+empresa+' | DINAMIT</title>'
-      +'<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"><\/script>'
+    /* ── KPI CARDS ── */
+    function kpiCard(label,val,icon,color){
+      return '<div style="background:#fff;border-radius:14px;padding:20px;border-left:4px solid '+color+';box-shadow:0 2px 8px rgba(0,0,0,.07)">'
+        +'<div style="font-size:22px;margin-bottom:6px">'+icon+'<\/div>'
+        +'<div style="font-size:11px;color:#888;font-weight:700;text-transform:uppercase;letter-spacing:.5px">'+label+'<\/div>'
+        +'<div style="font-size:20px;font-weight:800;color:#0C1A2E;margin-top:4px">'+val+'<\/div>'
+        +'<\/div>';
+    }
+
+    var kpisHTML='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px;margin-bottom:24px">'
+      +kpiCard('Ingresos Totales','$ '+ventas,'💰','#1D9E75')
+      +kpiCard('Utilidad Neta','$ '+utilNeta,'📈','#3B82F6')
+      +kpiCard('EBITDA','$ '+ebitda,'⚡','#8B5CF6')
+      +kpiCard('Total Activos','$ '+totalActivos,'🏢','#F59E0B')
+      +'<\/div>';
+
+    /* ── CONSTRUIR HTML FINAL ── */
+    var esJSON=JSON.stringify(analisis);
+    var bloqJSON=JSON.stringify(bloques);
+
+    var html='<!DOCTYPE html><html lang="es"><head>'
+      +'<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+      +'<title>Dashboard NIIF — '+empresa+' | DINAMIT<\/title>'
       +'<style>'
+      +'@import url(\'https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800;900&display=swap\');'
       +'*{box-sizing:border-box;margin:0;padding:0}'
-      +'body{font-family:Arial,sans-serif;background:#f0f4f8;color:#333}'
-      +'.topbar{background:#0C1A2E;padding:16px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;box-shadow:0 2px 12px rgba(0,0,0,.3)}'
-      +'.logo{color:#1D9E75;font-size:22px;font-weight:800;letter-spacing:1px}'
-      +'.logo span{color:rgba(255,255,255,.5);font-size:12px;font-weight:400;margin-left:8px}'
-      +'.btn-pdf{background:#1D9E75;color:#fff;border:none;padding:10px 22px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:opacity .2s}'
-      +'.btn-pdf:hover{opacity:.85}'
-      +'.container{max-width:960px;margin:0 auto;padding:24px 16px}'
-      +'.hero{background:linear-gradient(135deg,#0C1A2E 0%,#1a3a5c 100%);border-radius:16px;padding:32px;margin-bottom:24px;position:relative;overflow:hidden}'
-      +'.hero::after{content:"";position:absolute;right:-40px;top:-40px;width:200px;height:200px;background:rgba(29,158,117,.1);border-radius:50%}'
-      +'.badge{display:inline-block;background:rgba(29,158,117,.2);border:1px solid #1D9E75;color:#1D9E75;font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;margin-bottom:12px}'
-      +'.hero-empresa{color:#fff;font-size:28px;font-weight:800;margin-bottom:4px}'
-      +'.hero-sub{color:rgba(255,255,255,.55);font-size:14px}'
-      +'.hero-meta{display:flex;gap:24px;margin-top:20px;flex-wrap:wrap}'
-      +'.hero-meta-item{color:rgba(255,255,255,.7);font-size:13px}'
-      +'.hero-meta-item strong{color:#1D9E75;display:block;font-size:11px;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px}'
-      +'.card{background:#fff;border-radius:14px;padding:24px;margin-bottom:20px;box-shadow:0 2px 8px rgba(0,0,0,.06)}'
-      +'.card-title{font-size:15px;font-weight:800;color:#0C1A2E;margin-bottom:16px;display:flex;align-items:center;gap:8px;border-bottom:2px solid #f0f0f0;padding-bottom:12px}'
-      +'.section-tab{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}'
-      +'.tab-btn{background:#f0f4f8;border:none;padding:8px 16px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;color:#666;transition:all .2s}'
-      +'.tab-btn.active{background:#0C1A2E;color:#1D9E75}'
-      +'.sec-content{font-size:13.5px;line-height:1.75;color:#333}'
-      +'.footer{text-align:center;padding:32px 16px;color:#999;font-size:12px}'
-      +'@media print{.topbar .btn-pdf{display:none}.no-print{display:none}}'
-      +'@media(max-width:600px){.hero-empresa{font-size:20px}.hero-meta{gap:12px}}'
-      +'<\/style></head><body>'
+      +'body{font-family:Inter,Arial,sans-serif;background:#f0f4f8;color:#222}'
+      +'.topbar{background:#0C1A2E;padding:14px 28px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:200;box-shadow:0 2px 16px rgba(0,0,0,.4)}'
+      +'.logo{color:#1D9E75;font-size:20px;font-weight:900;letter-spacing:1px}'
+      +'.logo-sub{color:rgba(255,255,255,.4);font-size:11px;margin-left:10px;font-weight:400}'
+      +'.btn-pdf{background:#1D9E75;color:#fff;border:none;padding:10px 20px;border-radius:8px;font-weight:700;font-size:13px;cursor:pointer;letter-spacing:.3px;transition:all .2s}'
+      +'.btn-pdf:hover{background:#17856a;transform:translateY(-1px)}'
+      +'.container{max-width:1040px;margin:0 auto;padding:28px 20px}'
+      +'.hero{background:linear-gradient(135deg,#0C1A2E 0%,#0f2847 60%,#1a3a5c 100%);border-radius:20px;padding:36px 40px;margin-bottom:28px;position:relative;overflow:hidden}'
+      +'.hero::before{content:"";position:absolute;right:-60px;top:-60px;width:300px;height:300px;background:radial-gradient(circle,rgba(29,158,117,.15) 0%,transparent 70%);border-radius:50%}'
+      +'.hero::after{content:"";position:absolute;left:-30px;bottom:-80px;width:200px;height:200px;background:radial-gradient(circle,rgba(29,158,117,.08) 0%,transparent 70%);border-radius:50%}'
+      +'.badge{display:inline-flex;align-items:center;gap:6px;background:rgba(29,158,117,.2);border:1px solid rgba(29,158,117,.5);color:#1D9E75;font-size:11px;font-weight:700;padding:5px 14px;border-radius:20px;margin-bottom:14px;letter-spacing:.3px}'
+      +'.hero-empresa{color:#fff;font-size:32px;font-weight:900;margin-bottom:6px;letter-spacing:-.5px}'
+      +'.hero-sub{color:rgba(255,255,255,.5);font-size:14px;font-weight:400}'
+      +'.hero-meta{display:flex;gap:32px;margin-top:24px;flex-wrap:wrap;padding-top:20px;border-top:1px solid rgba(255,255,255,.08)}'
+      +'.hm{color:rgba(255,255,255,.65);font-size:13px}'
+      +'.hm strong{color:#1D9E75;display:block;font-size:10px;text-transform:uppercase;letter-spacing:.7px;margin-bottom:3px;font-weight:700}'
+      +'.card{background:#fff;border-radius:16px;padding:28px;margin-bottom:22px;box-shadow:0 2px 12px rgba(0,0,0,.06)}'
+      +'.card-hdr{display:flex;align-items:center;gap:10px;margin-bottom:20px;padding-bottom:14px;border-bottom:2px solid #f0f2f5}'
+      +'.card-hdr-icon{width:36px;height:36px;border-radius:10px;background:#f0faf6;display:flex;align-items:center;justify-content:center;font-size:18px}'
+      +'.card-hdr-title{font-size:15px;font-weight:800;color:#0C1A2E}'
+      +'.card-hdr-sub{font-size:12px;color:#888;margin-top:1px}'
+      +'.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px}'
+      +'.tab{background:#f0f4f8;border:none;padding:8px 18px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;color:#666;transition:all .2s;font-family:inherit}'
+      +'.tab.on{background:#0C1A2E;color:#1D9E75;box-shadow:0 2px 8px rgba(12,26,46,.3)}'
+      +'.sec{font-size:13.5px;line-height:1.8;color:#333}'
+      +'.footer{text-align:center;padding:36px 20px 48px;color:#aaa;font-size:12px;line-height:1.9}'
+      +'@media(max-width:640px){.hero{padding:24px 20px}.hero-empresa{font-size:22px}.hero-meta{gap:16px}}'
+      +'@media print{'
+      +'.topbar{position:static!important;box-shadow:none!important}'
+      +'.btn-pdf{display:none!important}'
+      +'.no-print{display:none!important}'
+      +'.card{box-shadow:none!important;border:1px solid #ddd!important;break-inside:avoid}'
+      +'body{background:#fff!important}'
+      +'}'
+      +'<\/style><\/head><body>'
 
-      /* TOP BAR */
+      /* TOPBAR */
       +'<div class="topbar no-print">'
-      +'<div class="logo">⚡ DINAMIT<span>Sistema de Análisis Financiero NIIF · Ecuador</span></div>'
-      +'<button class="btn-pdf" onclick="descargarPDF()">⬇ Descargar PDF</button>'
-      +'</div>'
+      +'<div><span class="logo">⚡ DINAMIT<\/span><span class="logo-sub">Sistema de Análisis Financiero NIIF · Ecuador<\/span><\/div>'
+      +'<button class="btn-pdf" onclick="window.print()">🖨 Imprimir / Guardar PDF<\/button>'
+      +'<\/div>'
+
+      /* CONTAINER */
+      +'<div class="container">'
 
       /* HERO */
-      +'<div class="container" id="informe-body">'
       +'<div class="hero">'
-      +'<div class="badge">✅ INFORME GENERADO CON IA · PAGO CONFIRMADO</div>'
-      +'<div class="hero-empresa">'+empresa+'</div>'
-      +'<div class="hero-sub">Informe Financiero Integral NIIF — Período '+año+'</div>'
+      +'<div class="badge">✅ INFORME IA · PAGO CONFIRMADO · NIIF ECUADOR<\/div>'
+      +'<div class="hero-empresa">'+empresa+'<\/div>'
+      +'<div class="hero-sub">Informe Financiero Integral NIIF · Período Fiscal '+año+'<\/div>'
       +'<div class="hero-meta">'
-      +'<div class="hero-meta-item"><strong>RUC</strong>'+ruc+'</div>'
-      +'<div class="hero-meta-item"><strong>Período</strong>'+año+'</div>'
-      +'<div class="hero-meta-item"><strong>Generado</strong>'+fecha+'</div>'
-      +'<div class="hero-meta-item"><strong>Norma</strong>NIIF / NIC · Ecuador</div>'
-      +'</div></div>'
+      +'<div class="hm"><strong>RUC<\/strong>'+ruc+'<\/div>'
+      +'<div class="hm"><strong>Período<\/strong>'+año+'<\/div>'
+      +'<div class="hm"><strong>Generado<\/strong>'+fecha+'<\/div>'
+      +'<div class="hm"><strong>Sistema<\/strong>DINAMIT v2.1 IA<\/div>'
+      +'<div class="hm"><strong>Norma<\/strong>NIIF · NIC · Supercias Ecuador<\/div>'
+      +'<\/div><\/div>'
+
+      /* KPIs */
+      +kpisHTML
 
       /* RATIOS SEMÁFORO */
-      +'<div class="card">'
-      +'<div class="card-title">🚦 Ratios NIIF con Semáforo</div>'
-      +ratiosHTML
-      +'</div>'
+      +(ratios.length>0
+        ?'<div class="card"><div class="card-hdr"><div class="card-hdr-icon">🚦<\/div><div><div class="card-hdr-title">17 Ratios NIIF con Semáforo<\/div><div class="card-hdr-sub">Evaluación de posición financiera vs estándares sectoriales Ecuador<\/div><\/div><\/div>'
+         +'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px">'+ratiosGrid+'<\/div><\/div>'
+        :'')
 
-      /* INFORME COMPLETO CON TABS */
-      +'<div class="card">'
-      +'<div class="card-title">📄 Informe Financiero Completo</div>'
-      +'<div class="section-tab" id="sec-tabs"></div>'
-      +'<div class="sec-content" id="sec-content"></div>'
-      +'</div>'
+      /* INFORME POR SECCIONES */
+      +'<div class="card"><div class="card-hdr"><div class="card-hdr-icon">📄<\/div><div><div class="card-hdr-title">Informe Financiero Completo<\/div><div class="card-hdr-sub">Estados Financieros · Análisis · Recomendaciones Ejecutivas<\/div><\/div><\/div>'
+      +'<div class="tabs" id="tabs-wrap"><\/div>'
+      +'<div class="sec" id="sec-out"><\/div>'
+      +'<\/div>'
 
       /* FOOTER */
-      +'<div class="footer">Generado el '+fecha+' · DINAMIT · Sistema Experto NIIF Ecuador<br>⚡ Ing. José Luis Mite Rodríguez CPA · RUC 0924158656001 · WhatsApp 0980379867</div>'
-      +'</div>'
+      +'<div class="footer">'
+      +'<strong style="color:#1D9E75;font-size:14px">⚡ DINAMIT<\/strong><br>'
+      +'Sistema Experto de Análisis Financiero NIIF · Ecuador<br>'
+      +'Generado el '+fecha+' · Ing. José Luis Mite Rodríguez CPA · RUC 0924158656001<br>'
+      +'WhatsApp: 0980379867 · <em>Confidencial — Uso Ejecutivo<\/em>'
+      +'<\/div>'
+      +'<\/div>' /* /container */
 
-      /* SCRIPT: tabs + PDF */
       +'<script>'
-      +'var _secciones='+JSON.stringify(secciones)+';'
-      +'var _titulos='+JSON.stringify(titulos.length>0?titulos:['Informe Completo'])+';'
-      +'var _analisis='+JSON.stringify(analisis)+';'
-      +'function md2html(txt){'
-      +'return txt.replace(/═{3,}/g,"<hr style=\'border:none;border-top:2px solid #1D9E75;margin:16px 0\'>").replace(/\\*\\*(.*?)\\*\\*/g,"<strong>$1</strong>").replace(/^#{1,3}\\s+(.+)$/gm,"<h3 style=\'color:#0C1A2E;font-size:15px;margin:16px 0 8px;border-left:4px solid #1D9E75;padding-left:10px\'>$1</h3>").replace(/^-\\s+(.+)$/gm,"<div style=\'padding:4px 0 4px 16px;border-bottom:1px solid #f5f5f5\'>▸ $1</div>").replace(/\\n\\n/g,"<br>").replace(/\\n/g,"<br>");'
+      +'var _bl='+bloqJSON+';'
+      +'var _an='+esJSON+';'
+      +'var _ICONS=["🏦","📊","🚦","🌐","📋","💡"];'
+      +'var _LABS=["1. ESF","2. ERI","3. Ratios","4. Sectorial","5. NIIF","6. Recomendaciones"];'
+      +'function parseLine(l){'
+      +'l=l.replace(/═{3,}/g,"<div style=\'height:3px;background:linear-gradient(90deg,#1D9E75,transparent);margin:16px 0;border-radius:2px\'><\/div>");'
+      +'l=l.replace(/^#{1,2}\\s+(.+)$/,"<h2 style=\'color:#0C1A2E;font-size:15px;font-weight:800;margin:20px 0 8px;padding:10px 14px;background:#f0faf6;border-left:4px solid #1D9E75;border-radius:0 8px 8px 0\'>$1<\/h2>");'
+      +'l=l.replace(/^###\\s+(.+)$/,"<h3 style=\'color:#1D9E75;font-size:12px;font-weight:800;margin:14px 0 6px;text-transform:uppercase;letter-spacing:.5px\'>$1<\/h3>");'
+      +'l=l.replace(/\\*\\*(.*?)\\*\\*/g,"<strong>$1<\/strong>");'
+      +'l=l.replace(/^-\\s+(.+)$/,"<div style=\'padding:5px 0 5px 14px;border-bottom:1px solid #f5f5f5;font-size:13px\'>&#9658; $1<\/div>");'
+      +'l=l.replace(/^---+$/,"<hr style=\'border:none;border-top:1px solid #e8e8e8;margin:10px 0\'>");'
+      +'return l;'
       +'}'
-      +'function showSec(i){'
-      +'document.querySelectorAll(".tab-btn").forEach(function(b,j){b.classList.toggle("active",i===j)});'
-      +'document.getElementById("sec-content").innerHTML=md2html(_secciones[i]||_analisis);'
+      +'function parseTbl(txt){'
+      +'var lines=txt.split("\\n");var out="";var rows=[];'
+      +'for(var i=0;i<lines.length;i++){'
+      +'var l=lines[i].trim();'
+      +'if(l.startsWith("|")){'
+      +'if(/^[\\|\\s\\-:]+$/.test(l)) continue;'
+      +'rows.push(l.replace(/^\\||\\|$/g,"").split("|").map(function(c){return c.trim();}));'
+      +'} else {'
+      +'if(rows.length){'
+      +'out+="<div style=\'overflow-x:auto;margin:14px 0\'><table style=\'width:100%;border-collapse:collapse;font-size:12.5px\'>";'
+      +'rows.forEach(function(row,ri){'
+      +'out+="<tr style=\'background:"+(ri===0?"#0C1A2E":ri%2===0?"#f8fafc":"#fff")+"\'>";'
+      +'row.forEach(function(cell){'
+      +'var t=ri===0?"th":"td";'
+      +'out+="<"+t+" style=\'padding:8px 11px;text-align:left;border-bottom:1px solid #eaecf0;color:"+(ri===0?"#1D9E75":"#333")+";font-weight:"+(ri===0?"700":"400")+"\'>"+cell+"<\/"+t+">";'
+      +'});out+="<\/tr>";});'
+      +'out+="<\/table><\/div>";rows=[];'
       +'}'
-      +'window.addEventListener("DOMContentLoaded",function(){'
-      +'var tabs=document.getElementById("sec-tabs");'
-      +'var labels=_titulos.length>1?_titulos:["Informe Completo"];'
-      +'if(_secciones.length<=1){tabs.style.display="none";document.getElementById("sec-content").innerHTML=md2html(_analisis);return;}'
-      +'labels.forEach(function(t,i){'
-      +'var b=document.createElement("button");b.className="tab-btn"+(i===0?" active":"");'
-      +'b.textContent=(i+1)+". "+(t.substring(0,30));'
-      +'b.onclick=function(){showSec(i)};tabs.appendChild(b);});'
-      +'showSec(0);'
-      +'});'
-      +'function descargarPDF(){'
-      +'if(typeof jspdf==="undefined"&&typeof window.jspdf==="undefined"){alert("Preparando PDF... intenta en un momento");return;}'
-      +'var jsPDF=window.jspdf.jsPDF;'
-      +'var doc=new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});'
-      +'var pageW=doc.internal.pageSize.getWidth();'
-      +'var margin=18;var lineH=6;var y=margin;'
-      +'/* Header */doc.setFillColor(12,26,46);doc.rect(0,0,pageW,28,\'F\');'
-      +'doc.setTextColor(29,158,117);doc.setFontSize(18);doc.setFont("helvetica","bold");doc.text("⚡ DINAMIT",margin,16);'
-      +'doc.setTextColor(255,255,255);doc.setFontSize(9);doc.setFont("helvetica","normal");doc.text("Sistema de Análisis Financiero NIIF · Ecuador",margin,22);'
-      +'y=38;'
-      +'/* Empresa */doc.setTextColor(12,26,46);doc.setFontSize(16);doc.setFont("helvetica","bold");doc.text('+JSON.stringify(empresa)+',margin,y);y+=8;'
-      +'doc.setFontSize(10);doc.setFont("helvetica","normal");doc.setTextColor(100,100,100);doc.text("RUC: '+ruc+' · Período: '+año+' · Generado: '+fecha+'",margin,y);y+=10;'
-      +'/* Línea */doc.setDrawColor(29,158,117);doc.setLineWidth(.5);doc.line(margin,y,pageW-margin,y);y+=8;'
-      +'/* Texto del informe */var lineas=_analisis.replace(/═{3,}/g,"────────────────────────").replace(/\\*\\*(.*?)\\*\\*/g,"$1").split("\\n");'
-      +'doc.setFontSize(9);doc.setTextColor(50,50,50);'
-      +'lineas.forEach(function(l){'
-      +'if(y>275){doc.addPage();y=margin;}'
-      +'var wrapped=doc.splitTextToSize(l||" ",pageW-margin*2);'
-      +'wrapped.forEach(function(wl){if(y>275){doc.addPage();y=margin;}doc.text(wl,margin,y);y+=lineH;});'
-      +'});'
-      +'/* Footer */doc.setFontSize(8);doc.setTextColor(150,150,150);doc.text("DINAMIT · Ing. José Luis Mite Rodríguez CPA · RUC 0924158656001",margin,285);'
-      +'doc.save("DINAMIT_Informe_NIIF_'+empresa.replace(/\s+/g,'_')+'_'+año+'.pdf");'
+      +'out+=parseLine(l)+"\\n";'
       +'}'
+      +'}'
+      +'if(rows.length){'
+      +'out+="<div style=\'overflow-x:auto;margin:14px 0\'><table style=\'width:100%;border-collapse:collapse;font-size:12.5px\'>";'
+      +'rows.forEach(function(row,ri){'
+      +'out+="<tr style=\'background:"+(ri===0?"#0C1A2E":ri%2===0?"#f8fafc":"#fff")+"\'>";'
+      +'row.forEach(function(cell){var t=ri===0?"th":"td";out+="<"+t+" style=\'padding:8px 11px;text-align:left;border-bottom:1px solid #eaecf0;color:"+(ri===0?"#1D9E75":"#333")+";font-weight:"+(ri===0?"700":"400")+"\'>"+cell+"<\/"+t+">";});'
+      +'out+="<\/tr>";});out+="<\/table><\/div>";'
+      +'}'
+      +'return out;'
+      +'}'
+      +'function showBlk(i){'
+      +'document.querySelectorAll(".tab").forEach(function(b,j){b.classList.toggle("on",i===j);});'
+      +'document.getElementById("sec-out").innerHTML=parseTbl(_bl[i]||_an);'
+      +'window.scrollTo({top:document.getElementById("sec-out").getBoundingClientRect().top+window.scrollY-100,behavior:"smooth"});'
+      +'}'
+      +'(function init(){'
+      +'var wrap=document.getElementById("tabs-wrap");'
+      +'var total=Math.min(_bl.length,6);'
+      +'if(total<=1){document.getElementById("sec-out").innerHTML=parseTbl(_an);return;}'
+      +'for(var i=0;i<total;i++){'
+      +'(function(idx){'
+      +'var b=document.createElement("button");b.className="tab"+(idx===0?" on":"");'
+      +'var icon=_ICONS[idx]||"📄";var lab=_LABS[idx]||("Sección "+(idx+1));'
+      +'b.innerHTML=icon+" "+lab;'
+      +'b.onclick=function(){showBlk(idx);};wrap.appendChild(b);'
+      +'})(i);'
+      +'}'
+      +'showBlk(0);'
+      +'})();'
       +'<\/script>'
-      +'</body></html>';
+      +'<\/body><\/html>';
 
     document.open();
     document.write(html);
@@ -4256,16 +4379,26 @@ function openAdminLogin(){
   overlay.id='admin-panel-bg';
   overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9999;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)';
 
-  overlay.innerHTML='<div style="background:#0C1A2E;border-radius:16px;padding:28px 24px;max-width:420px;width:92%;border:1px solid #1a2f47;position:relative">'
-    +'<button onclick="closeAdminPanel()" style="position:absolute;top:12px;right:14px;background:none;border:none;color:rgba(255,255,255,.5);font-size:20px;cursor:pointer">×</button>'
-    +'<div style="text-align:center;margin-bottom:20px">'
-    +'<div style="font-size:28px;margin-bottom:4px">⚙️</div>'
-    +'<div style="color:#fff;font-size:16px;font-weight:800">Panel Admin · DINAMIT</div>'
-    +'<div style="color:rgba(255,255,255,.5);font-size:11px;margin-top:4px">Acceso exclusivo · Ing. José Mite R. CPA</div>'
+  overlay.innerHTML='<div id="admin-modal" style="background:#0C1A2E;border-radius:16px;width:96%;max-width:860px;max-height:92vh;overflow-y:auto;border:1px solid #1a2f47;position:relative;display:flex;flex-direction:column">'
+    /* HEADER siempre visible */
+    +'<div style="background:#091525;padding:16px 20px;border-radius:16px 16px 0 0;border-bottom:1px solid #1a2f47;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10">'
+    +'<div style="display:flex;align-items:center;gap:12px">'
+    +'<div style="font-size:22px">⚙️</div>'
+    +'<div><div style="color:#fff;font-size:15px;font-weight:800">Panel Admin · DINAMIT</div>'
+    +'<div style="color:rgba(255,255,255,.4);font-size:11px">Ing. José Luis Mite Rodríguez CPA</div></div>'
     +'</div>'
-    +'<div id="admin-login-form" style="text-align:center">'    +'<div style="color:rgba(255,255,255,.6);font-size:13px;margin-bottom:18px;line-height:1.5">Ingresa con tu cuenta de Google<br><span style="font-size:11px;color:rgba(255,255,255,.35)">Solo el administrador autorizado tiene acceso</span></div>'    +'<button onclick="doAdminLogin()" style="width:100%;background:#fff;color:#1a1a1a;border:none;border-radius:9px;padding:13px 16px;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;box-sizing:border-box">'    +'<svg width=\"20\" height=\"20\" viewBox=\"0 0 48 48\"><path fill=\"#EA4335\" d=\"M24 9.5c3.5 0 6.6 1.3 9 3.4l6.7-6.7C35.8 2.4 30.3 0 24 0 14.7 0 6.9 5.5 3 13.5l7.8 6C12.7 13.5 17.9 9.5 24 9.5z\"/><path fill=\"#4285F4\" d=\"M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4 7.1-10 7.1-17z\"/><path fill=\"#FBBC05\" d=\"M10.8 28.5c-.5-1.5-.8-3-.8-4.5s.3-3 .8-4.5l-7.8-6C1.1 16.6 0 20.2 0 24s1.1 7.4 3 10.5l7.8-6z\"/><path fill=\"#34A853\" d=\"M24 48c6.3 0 11.6-2.1 15.5-5.7l-7.5-5.8c-2.1 1.4-4.8 2.3-8 2.3-6.1 0-11.3-4-13.2-9.5l-7.8 6C6.9 42.5 14.7 48 24 48z\"/><path fill=\"none\" d=\"M0 0h48v48H0z\"/></svg>'    +'Continuar con Google</button>'    +'<div id="admin-login-err" style="color:#ff5555;font-size:11px;text-align:center;margin-top:12px;display:none"></div>'    +'</div>'
+    +'<button onclick="closeAdminPanel()" style="background:rgba(255,255,255,.08);border:none;color:rgba(255,255,255,.7);font-size:18px;cursor:pointer;width:34px;height:34px;border-radius:8px;display:flex;align-items:center;justify-content:center">×</button>'
+    +'</div>'
+    +'<div style="padding:20px">'
+    +'<div id="admin-login-form" style="text-align:center;padding:20px 0">'
+    +'<div style="color:rgba(255,255,255,.6);font-size:13px;margin-bottom:18px;line-height:1.5">Ingresa con tu cuenta de Google<br><span style="font-size:11px;color:rgba(255,255,255,.35)">Solo el administrador autorizado tiene acceso</span></div>'
+    +'<button onclick="doAdminLogin()" style="width:100%;max-width:280px;background:#fff;color:#1a1a1a;border:none;border-radius:9px;padding:13px 16px;font-size:14px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;box-sizing:border-box;margin:0 auto">'
+    +'<svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.3 9 3.4l6.7-6.7C35.8 2.4 30.3 0 24 0 14.7 0 6.9 5.5 3 13.5l7.8 6C12.7 13.5 17.9 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4 7.1-10 7.1-17z"/><path fill="#FBBC05" d="M10.8 28.5c-.5-1.5-.8-3-.8-4.5s.3-3 .8-4.5l-7.8-6C1.1 16.6 0 20.2 0 24s1.1 7.4 3 10.5l7.8-6z"/><path fill="#34A853" d="M24 48c6.3 0 11.6-2.1 15.5-5.7l-7.5-5.8c-2.1 1.4-4.8 2.3-8 2.3-6.1 0-11.3-4-13.2-9.5l-7.8 6C6.9 42.5 14.7 48 24 48z"/></svg>'
+    +'Continuar con Google</button>'
+    +'<div id="admin-login-err" style="color:#ff5555;font-size:11px;text-align:center;margin-top:12px;display:none"></div>'
+    +'</div>'
     +'<div id="admin-orders-panel" style="display:none"></div>'
-    +'</div>';
+    +'</div></div>';
 
   document.body.appendChild(overlay);
 }
@@ -4345,150 +4478,179 @@ function doAdminLogin(){
   };
   setTimeout(ready,1200);
 })();
+/* ═══════════════════════════════════════
+   ADMIN PANEL — EXECUTIVE DASHBOARD
+═══════════════════════════════════════ */
+
 function showAdminOrders(){
   document.getElementById('admin-login-form').style.display='none';
   var panel=document.getElementById('admin-orders-panel');
   panel.style.display='block';
   panel.innerHTML=
-    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">'
-    +'<div style="color:var(--teal,#1D9E75);font-weight:800;font-size:14px">📊 Dashboard DINAMIT</div>'
-    +'<div style="display:flex;gap:6px">'
-    +'<button onclick="showAdminTab(\'stats\')" id="tab-stats" style="background:var(--teal,#1D9E75);color:#0a1e35;border:none;border-radius:6px;padding:5px 10px;font-size:10px;font-weight:700;cursor:pointer">📈 Stats</button>'
-    +'<button onclick="showAdminTab(\'orders\')" id="tab-orders" style="background:#122338;color:rgba(255,255,255,.7);border:1px solid #1a2f47;border-radius:6px;padding:5px 10px;font-size:10px;cursor:pointer">📋 Órdenes</button>'
-    +'<button onclick="doAdminLogout()" style="background:#2a1515;color:#ff5555;border:1px solid #3a1515;border-radius:6px;padding:5px 10px;font-size:10px;cursor:pointer">Salir</button>'
-    +'</div>'
+    /* NAV TABS */
+    '<div style="display:flex;align-items:center;gap:6px;margin-bottom:16px;flex-wrap:wrap">'
+    +'<button onclick="showAdminTab(\'stats\')" id="tab-stats" style="background:#1D9E75;color:#0a1e35;border:none;border-radius:7px;padding:7px 14px;font-size:11px;font-weight:800;cursor:pointer;transition:.2s">📊 Dashboard</button>'
+    +'<button onclick="showAdminTab(\'orders\')" id="tab-orders" style="background:rgba(255,255,255,.07);color:rgba(255,255,255,.65);border:1px solid #1a2f47;border-radius:7px;padding:7px 14px;font-size:11px;font-weight:600;cursor:pointer">📋 Órdenes</button>'
+    +'<div style="flex:1"></div>'
+    +'<button onclick="adminRefreshAll()" title="Actualizar" style="background:rgba(255,255,255,.07);color:rgba(255,255,255,.5);border:1px solid #1a2f47;border-radius:7px;padding:7px 10px;font-size:12px;cursor:pointer">🔄</button>'
+    +'<button onclick="doAdminLogout()" style="background:#2a1515;color:#ff5555;border:1px solid #3a2020;border-radius:7px;padding:7px 10px;font-size:11px;font-weight:600;cursor:pointer">Salir</button>'
     +'</div>'
     +'<div id="admin-tab-content"></div>';
-  loadAdminDashboard();
-  loadAdminOrders(); /* pre-load _adminOrders so Confirmar works from Stats tab */
+  loadAllAdmin();
+}
+
+function adminRefreshAll(){
+  loadAllAdmin();
 }
 
 function showAdminTab(tab){
-  document.getElementById('tab-stats').style.background=tab==='stats'?'var(--teal,#1D9E75)':'#122338';
-  document.getElementById('tab-stats').style.color=tab==='stats'?'#0a1e35':'rgba(255,255,255,.7)';
-  document.getElementById('tab-orders').style.background=tab==='orders'?'var(--teal,#1D9E75)':'#122338';
-  document.getElementById('tab-orders').style.color=tab==='orders'?'#0a1e35':'rgba(255,255,255,.7)';
-  if(tab==='stats') loadAdminDashboard();
-  else loadAdminOrders();
-}
-
-function loadAdminDashboard(){
+  var tabStats=document.getElementById('tab-stats');
+  var tabOrders=document.getElementById('tab-orders');
+  if(!tabStats||!tabOrders) return;
+  tabStats.style.background=tab==='stats'?'#1D9E75':'rgba(255,255,255,.07)';
+  tabStats.style.color=tab==='stats'?'#0a1e35':'rgba(255,255,255,.65)';
+  tabStats.style.border=tab==='stats'?'none':'1px solid #1a2f47';
+  tabOrders.style.background=tab==='orders'?'#1D9E75':'rgba(255,255,255,.07)';
+  tabOrders.style.color=tab==='orders'?'#0a1e35':'rgba(255,255,255,.65)';
+  tabOrders.style.border=tab==='orders'?'none':'1px solid #1a2f47';
   var el=document.getElementById('admin-tab-content');
-  el.innerHTML='<div style="color:rgba(255,255,255,.5);font-size:11px;text-align:center;padding:16px">Cargando métricas...</div>';
+  if(!el) return;
+  if(tab==='stats') renderAdminDashboard(el, _adminOrders);
+  else renderAdminOrders();
+}
 
-  if(typeof firebase==='undefined'||!firebase.apps||!firebase.apps.length){
-    renderAdminDashboardLocal(el);
-    return;
+function loadAllAdmin(){
+  /* Single Firestore query — feeds both tabs */
+  var el=document.getElementById('admin-tab-content');
+  if(el) el.innerHTML='<div style="color:rgba(255,255,255,.4);font-size:12px;text-align:center;padding:28px">Cargando datos...</div>';
+  if(typeof firebase!=='undefined'&&firebase.apps&&firebase.apps.length){
+    firebase.firestore().collection('dinamit_orders')
+      .orderBy('ts','desc').limit(200)
+      .get()
+      .then(function(snap){
+        _adminOrders=[];
+        snap.forEach(function(doc){
+          _adminOrders.push(Object.assign({id:doc.id},doc.data()));
+        });
+        /* render dashboard by default */
+        if(el) renderAdminDashboard(el, _adminOrders);
+      })
+      .catch(function(e){
+        if(el) el.innerHTML='<div style="color:#ff5555;font-size:11px;padding:12px">Error Firestore: '+e.message+'</div>';
+      });
+  } else {
+    _adminOrders=JSON.parse(localStorage.getItem('dinamit_pending')||'[]');
+    if(el) renderAdminDashboard(el, _adminOrders);
   }
-
-  var db=firebase.firestore();
-  var now=Date.now();
-  var day7=now-7*24*3600000;
-
-  db.collection('dinamit_orders').get().then(function(snap){
-    var all=[];
-    snap.forEach(function(d){ all.push({id:d.id,...d.data()}); });
-    renderAdminDashboard(el,all);
-  }).catch(function(e){
-    el.innerHTML='<div style="color:#ff5555;font-size:11px">Error: '+e.message+'</div>';
-  });
 }
 
-function renderAdminDashboardLocal(el){
-  var all=JSON.parse(localStorage.getItem('dinamit_pending')||'[]');
-  renderAdminDashboard(el,all);
-}
-
-function renderAdminDashboard(el,all){
+/* ── DASHBOARD TAB ── */
+function renderAdminDashboard(el, all){
+  if(!el) return;
   var total=all.length;
-  var pending=all.filter(function(o){return o.status==='pendiente';}).length;
-  var confirmed=all.filter(function(o){return o.status==='entregado';}).length;
-  var rejected=all.filter(function(o){return o.status==='rechazado';}).length;
-  var revenue=confirmed*1; /* $1 per order */
+  var pending=all.filter(function(o){return o.status==='pendiente';});
+  var delivered=all.filter(function(o){return o.status==='entregado';});
+  var rejected=all.filter(function(o){return o.status==='rechazado';});
+  var revenue=delivered.length; /* $1 per delivered order */
+  var conversion=total?Math.round(delivered.length/total*100):0;
 
-  /* by method */
+  /* Método de pago */
   var byMethod={};
-  all.forEach(function(o){
-    var m=o.method||'transferencia';
-    byMethod[m]=(byMethod[m]||0)+1;
-  });
+  all.forEach(function(o){ var m=o.method||'transferencia'; byMethod[m]=(byMethod[m]||0)+1; });
 
-  /* by province */
-  var byProv={};
-  /* by day (last 7) */
-  var byDay={};
-  var now=Date.now();
-  all.forEach(function(o){
-    if(o.ts&&(now-o.ts)<7*24*3600000){
-      var d=new Date(o.ts);
-      var dk=d.getDate()+'/'+(d.getMonth()+1);
-      byDay[dk]=(byDay[dk]||0)+1;
-    }
-  });
-
-  /* whatsapps of pending */
-  var pendingOrders=all.filter(function(o){return o.status==='pendiente';});
+  /* Últimas 5 órdenes recientes */
+  var recientes=all.slice(0,5);
 
   el.innerHTML=
-    /* KPI strip */
-    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">'
-    +_kpi('💰 Ingresos','$'+revenue.toFixed(2),'#1D9E75')
-    +_kpi('📋 Total órdenes',total,'#5B8DCC')
-    +_kpi('⏳ Pendientes',pending,'#F5A623')
-    +_kpi('✅ Entregados',confirmed,'#1D9E75')
+    /* ── KPI CARDS 2×2 ── */
+    '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:16px">'
+    +_kpi('💰 Ingresos Totales','$'+revenue.toFixed(2),'#1D9E75','#0d2e20')
+    +_kpi('📋 Total Pedidos',total,'#5B8DCC','#0d1f35')
+    +_kpi('⏳ Pendientes',pending.length,'#F5A623','#2e1f06')
+    +_kpi('✅ Entregados',delivered.length,'#1D9E75','#0d2e20')
     +'</div>'
 
-    /* Method breakdown */
-    +'<div style="background:#0a1e35;border-radius:8px;padding:10px;margin-bottom:10px">'
-    +'<div style="color:var(--teal,#1D9E75);font-size:10px;font-weight:700;margin-bottom:8px;text-transform:uppercase">Método de pago</div>'
+    /* ── FILA 2: conversión + método ── */
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">'
+
+    /* Conversión */
+    +'<div style="background:#091525;border:1px solid #1a2f47;border-radius:10px;padding:14px">'
+    +'<div style="color:#1D9E75;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">📈 Conversión</div>'
+    +'<div style="display:flex;align-items:flex-end;gap:6px;margin-bottom:8px">'
+    +'<div style="font-size:28px;font-weight:900;color:#fff;line-height:1">'+conversion+'%</div>'
+    +'<div style="font-size:10px;color:rgba(255,255,255,.4);margin-bottom:4px">de pedidos entregados</div>'
+    +'</div>'
+    +'<div style="background:#122338;border-radius:6px;height:8px">'
+    +'<div style="background:linear-gradient(90deg,#1D9E75,#2DD4BF);height:8px;border-radius:6px;width:'+conversion+'%;transition:.5s"></div>'
+    +'</div></div>'
+
+    /* Método de pago */
+    +'<div style="background:#091525;border:1px solid #1a2f47;border-radius:10px;padding:14px">'
+    +'<div style="color:#1D9E75;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">🏦 Método Pago</div>'
     +Object.keys(byMethod).map(function(m){
       var pct=total?Math.round(byMethod[m]/total*100):0;
-      return '<div style="margin-bottom:6px">'
-        +'<div style="display:flex;justify-content:space-between;font-size:10px;color:rgba(255,255,255,.8);margin-bottom:3px">'
+      return '<div style="margin-bottom:8px">'
+        +'<div style="display:flex;justify-content:space-between;font-size:10px;color:rgba(255,255,255,.75);margin-bottom:4px">'
         +'<span>'+(m==='transferencia'?'🏦 Transferencia':'💜 Deuna')+'</span>'
-        +'<span>'+byMethod[m]+' ('+pct+'%)</span>'
+        +'<span style="font-weight:700">'+byMethod[m]+' ('+pct+'%)</span>'
         +'</div>'
         +'<div style="background:#122338;border-radius:4px;height:5px">'
-        +'<div style="background:var(--teal,#1D9E75);height:5px;border-radius:4px;width:'+pct+'%"></div>'
+        +'<div style="background:#1D9E75;height:5px;border-radius:4px;width:'+pct+'%"></div>'
         +'</div></div>';
-    }).join('')
+    }).join('')+'</div>'
     +'</div>'
 
-    /* Pending orders with WS buttons */
-    +'<div style="background:#0a1e35;border-radius:8px;padding:10px;margin-bottom:10px">'
-    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
-    +'<div style="color:#F5A623;font-size:10px;font-weight:700;text-transform:uppercase">⏳ Pendientes por confirmar</div>'
-    +'<button onclick="loadAdminOrders()" style="background:#122338;color:rgba(255,255,255,.6);border:1px solid #1a2f47;border-radius:5px;padding:3px 8px;font-size:9px;cursor:pointer">🔄</button>'
-    +'</div>'
-    +(pendingOrders.length===0
-      ?'<div style="color:rgba(255,255,255,.4);font-size:11px;text-align:center;padding:8px">Sin pendientes ✅</div>'
-      :pendingOrders.map(function(o,i){
-        return '<div style="background:#122338;border-radius:7px;padding:9px;margin-bottom:7px;border-left:3px solid #F5A623">'
-          +'<div style="color:#fff;font-size:11px;font-weight:700">'+o.empresa+'</div>'
-          +'<div style="color:rgba(255,255,255,.5);font-size:9px">'+o.ruc+' · '+(o.method||'transferencia')+' · '+(o.ts?new Date(o.ts).toLocaleString('es-EC'):'')+'</div>'
-          +'<div style="display:flex;gap:5px;margin-top:7px;flex-wrap:wrap">'
-          +'<button onclick="confirmOrderById(\''+o.id+'\')" style="background:#1D9E75;color:#fff;border:none;border-radius:5px;padding:5px 9px;font-size:9px;font-weight:700;cursor:pointer">✅ Confirmar</button>'
-          +'<a href="https://wa.me/593'+String(o.tel||'').replace(/^0/,'')+'" target="_blank" style="background:#25D366;color:#fff;border-radius:5px;padding:5px 9px;font-size:9px;font-weight:700;text-decoration:none">📱 '+o.tel+'</a>'
-          +'<button onclick="rejectOrderById(\''+o.id+'\')" style="background:#2a1515;color:#ff5555;border:1px solid #3a1515;border-radius:5px;padding:5px 9px;font-size:9px;cursor:pointer">✗</button>'
+    /* ── PENDIENTES URGENTES ── */
+    +(pending.length>0?
+      '<div style="background:#1a0f00;border:1px solid #3a2500;border-radius:10px;padding:14px;margin-bottom:16px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+      +'<div style="color:#F5A623;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px">⏳ Pendientes por confirmar ('+pending.length+')</div>'
+      +'</div>'
+      +pending.map(function(o){
+        return '<div style="background:#221505;border-radius:8px;padding:10px;margin-bottom:8px;border-left:3px solid #F5A623">'
+          +'<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:6px">'
+          +'<div>'
+          +'<div style="color:#fff;font-size:12px;font-weight:800">'+o.empresa+'</div>'
+          +'<div style="color:rgba(255,255,255,.45);font-size:9px;margin-top:2px">RUC: '+o.ruc+' · '+(o.method||'transferencia')+'</div>'
+          +'</div>'
+          +'<div style="color:rgba(255,255,255,.35);font-size:9px">'+(o.ts?new Date(o.ts).toLocaleDateString('es-EC'):'')+'</div>'
+          +'</div>'
+          +'<div style="display:flex;gap:5px;flex-wrap:wrap">'
+          +'<button onclick="confirmOrderById(\''+o.id+'\')" style="background:#1D9E75;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:10px;font-weight:800;cursor:pointer">✅ Confirmar</button>'
+          +'<a href="https://wa.me/593'+String(o.tel||'').replace(/^0/,'')+'" target="_blank" style="background:#25D366;color:#fff;border-radius:6px;padding:6px 12px;font-size:10px;font-weight:700;text-decoration:none">📱 '+o.tel+'</a>'
+          +'<button onclick="rejectOrderById(\''+o.id+'\')" style="background:transparent;color:#ff5555;border:1px solid #3a1515;border-radius:6px;padding:6px 10px;font-size:10px;cursor:pointer">✗</button>'
           +'</div></div>';
       }).join('')
-    )
-    +'</div>'
+      +'</div>'
+    :'<div style="background:#091525;border:1px solid #1a2f47;border-radius:10px;padding:14px;margin-bottom:16px;text-align:center;color:rgba(255,255,255,.4);font-size:12px">✅ Sin pedidos pendientes</div>')
 
-    /* Revenue summary */
-    +'<div style="background:#0a1e35;border-radius:8px;padding:10px">'
-    +'<div style="color:var(--teal,#1D9E75);font-size:10px;font-weight:700;margin-bottom:8px;text-transform:uppercase">💰 Resumen Financiero</div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">'
-    +_mini('Ingresos','$'+revenue.toFixed(2))
-    +_mini('Ticket promedio','$1.00')
-    +_mini('Conversión',total?(Math.round(confirmed/total*100)+'%'):'0%')
-    +'</div></div>';
+    /* ── ACTIVIDAD RECIENTE ── */
+    +'<div style="background:#091525;border:1px solid #1a2f47;border-radius:10px;padding:14px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+    +'<div style="color:#1D9E75;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px">🕐 Actividad Reciente</div>'
+    +'<button onclick="showAdminTab(\'orders\')" style="background:rgba(255,255,255,.07);color:rgba(255,255,255,.5);border:1px solid #1a2f47;border-radius:5px;padding:3px 8px;font-size:9px;cursor:pointer">Ver todas →</button>'
+    +'</div>'
+    +(!recientes.length?'<div style="color:rgba(255,255,255,.35);font-size:11px;text-align:center">Sin datos</div>'
+    :recientes.map(function(o){
+      var st=o.status||'pendiente';
+      var sc=st==='entregado'?'#1D9E75':st==='rechazado'?'#ff5555':'#F5A623';
+      var sl=st==='entregado'?'✅':st==='rechazado'?'✗':'⏳';
+      return '<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #122338">'
+        +'<span style="color:'+sc+';font-size:14px">'+sl+'</span>'
+        +'<div style="flex:1;min-width:0">'
+        +'<div style="color:#fff;font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+o.empresa+'</div>'
+        +'<div style="color:rgba(255,255,255,.4);font-size:9px">'+o.ruc+'</div>'
+        +'</div>'
+        +'<div style="color:rgba(255,255,255,.35);font-size:9px;white-space:nowrap">'+(o.ts?new Date(o.ts).toLocaleDateString('es-EC'):'')+'</div>'
+        +'</div>';
+    }).join(''))
+    +'</div>';
 }
 
-function _kpi(lbl,val,color){
-  return '<div style="background:#0a1e35;border-radius:8px;padding:10px;text-align:center">'
-    +'<div style="color:rgba(255,255,255,.5);font-size:9px;text-transform:uppercase;margin-bottom:4px">'+lbl+'</div>'
-    +'<div style="color:'+color+';font-size:18px;font-weight:800">'+val+'</div>'
+function _kpi(lbl,val,color,bg){
+  return '<div style="background:'+(bg||'#091525')+';border:1px solid #1a2f47;border-radius:10px;padding:14px">'
+    +'<div style="color:rgba(255,255,255,.45);font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">'+lbl+'</div>'
+    +'<div style="color:'+color+';font-size:26px;font-weight:900;line-height:1">'+val+'</div>'
     +'</div>';
 }
 
@@ -4499,91 +4661,60 @@ function _mini(lbl,val){
     +'</div>';
 }
 
+/* ── ÓRDENES TAB ── */
 function loadAdminOrders(){
-  /* Load from Firestore — always, regardless of active tab */
-  if(typeof firebase!=='undefined'&&firebase.apps&&firebase.apps.length){
-    firebase.firestore().collection('dinamit_orders')
-      .orderBy('ts','desc')
-      .limit(100)
-      .get()
-      .then(function(snap){
-        _adminOrders=[];
-        snap.forEach(function(doc){
-          var d=doc.data();
-          _adminOrders.push(Object.assign({id:doc.id},d));
-        });
-        console.log('[DINAMIT] Órdenes cargadas en _adminOrders:',_adminOrders.length);
-        renderAdminOrders();
-        /* also refresh stats panel if visible */
-        var statsEl=document.getElementById('admin-stats-panel');
-        if(statsEl&&typeof renderAdminDashboard==='function') renderAdminDashboard(statsEl,_adminOrders);
-      })
-      .catch(function(e){
-        var listEl2=document.getElementById('admin-tab-content');
-        if(listEl2) listEl2.innerHTML='<div style="color:#ff5555;font-size:11px">Error Firestore: '+e.message+'</div>';
-      });
-  } else {
-    /* Local fallback */
-    _adminOrders=JSON.parse(localStorage.getItem('dinamit_pending')||'[]');
-    renderAdminOrders();
-  }
+  /* Alias para compatibilidad */
+  loadAllAdmin();
 }
 
 function renderAdminOrders(){
-  var listEl=document.getElementById('admin-tab-content')||document.getElementById('admin-orders-list');
+  var listEl=document.getElementById('admin-tab-content');
   if(!listEl) return;
-
-  /* Status filter */
   var pending=_adminOrders.filter(function(o){return o.status==='pendiente';});
   var delivered=_adminOrders.filter(function(o){return o.status==='entregado';});
   var rejected=_adminOrders.filter(function(o){return o.status==='rechazado';});
 
   if(!_adminOrders.length){
-    listEl.innerHTML='<div style="color:rgba(255,255,255,.5);font-size:12px;text-align:center;padding:12px">No hay órdenes ✅</div>';
+    listEl.innerHTML='<div style="color:rgba(255,255,255,.4);font-size:12px;text-align:center;padding:28px">No hay órdenes registradas</div>';
     return;
   }
 
-  /* Section header */
-  listEl.innerHTML='<div style="color:rgba(255,255,255,.6);font-size:10px;margin-bottom:10px">'
-    +'Total: '+_adminOrders.length+' &nbsp;·&nbsp; '
-    +'<span style="color:#F5A623">⏳ '+pending.length+' pendientes</span> &nbsp;·&nbsp; '
-    +'<span style="color:#1D9E75">✅ '+delivered.length+' entregados</span> &nbsp;·&nbsp; '
-    +'<span style="color:#ff5555">✗ '+rejected.length+' rechazados</span>'
+  listEl.innerHTML=
+    /* Resumen rápido */
+    '<div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap">'
+    +'<span style="color:rgba(255,255,255,.5);font-size:11px">Total: <b style="color:#fff">'+_adminOrders.length+'</b></span>'
+    +'<span style="color:#F5A623;font-size:11px">⏳ <b>'+pending.length+'</b> pendientes</span>'
+    +'<span style="color:#1D9E75;font-size:11px">✅ <b>'+delivered.length+'</b> entregados</span>'
+    +'<span style="color:#ff5555;font-size:11px">✗ <b>'+rejected.length+'</b> rechazados</span>'
     +'</div>'
-    +_adminOrders.map(function(o,i){
+    +_adminOrders.map(function(o){
       var st=o.status||'pendiente';
-      var statusColor=st==='entregado'?'#1D9E75':st==='rechazado'?'#ff5555':'#F5A623';
-      var statusLabel=st==='entregado'?'✅ Entregado':st==='rechazado'?'✗ Rechazado':'⏳ Pendiente';
-      return '<div style="background:#0a1e35;border-radius:7px;padding:9px;margin-bottom:7px;border-left:3px solid '+statusColor+'">'
-        +'<div style="display:flex;justify-content:space-between;align-items:center">'
-        +'<div style="color:#fff;font-size:11px;font-weight:700">'+o.empresa+'</div>'
-        +'<span style="color:'+statusColor+';font-size:9px;font-weight:700">'+statusLabel+'</span>'
+      var sc=st==='entregado'?'#1D9E75':st==='rechazado'?'#ff5555':'#F5A623';
+      var sl=st==='entregado'?'✅ Entregado':st==='rechazado'?'✗ Rechazado':'⏳ Pendiente';
+      return '<div style="background:#091525;border:1px solid #1a2f47;border-radius:10px;padding:12px;margin-bottom:8px;border-left:3px solid '+sc+'">'
+        +'<div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:6px">'
+        +'<div style="flex:1;min-width:0">'
+        +'<div style="color:#fff;font-size:12px;font-weight:800;margin-bottom:2px">'+o.empresa+'</div>'
+        +'<div style="color:rgba(255,255,255,.45);font-size:10px">RUC '+o.ruc+'</div>'
         +'</div>'
-        +'<div style="color:rgba(255,255,255,.5);font-size:9px;margin-top:2px">RUC: '+o.ruc+' · '+(o.method||'transferencia')+' · $1.00</div>'
-        +'<div style="color:rgba(255,255,255,.6);font-size:9px;margin-top:1px">📱 '+o.tel+' · '+(o.ts?new Date(o.ts).toLocaleString('es-EC'):'')+'</div>'
-        +(o.status==='pendiente'?
-          '<div style="display:flex;gap:5px;margin-top:7px">'
-          +'<button onclick="confirmOrderById(\''+o.id+'\')" style="background:#1D9E75;color:#fff;border:none;border-radius:5px;padding:5px 9px;font-size:9px;font-weight:700;cursor:pointer">✅ Confirmar</button>'
-          +'<a href="https://wa.me/593'+String(o.tel||'').replace(/^0/,'')+'" target="_blank" style="background:#25D366;color:#fff;border-radius:5px;padding:5px 9px;font-size:9px;font-weight:700;text-decoration:none">📱 WS</a>'
-          +'<button onclick="rejectOrderById(\''+o.id+'\')" style="background:#2a1515;color:#ff5555;border:1px solid #3a1515;border-radius:5px;padding:5px 9px;font-size:9px;cursor:pointer">✗ Rechazar</button>'
-          +'</div>':'')
-        +'</div>';
+        +'<span style="color:'+sc+';font-size:9px;font-weight:700;background:'+sc+'1a;border-radius:4px;padding:3px 7px;margin-left:8px;white-space:nowrap">'+sl+'</span>'
+        +'</div>'
+        +'<div style="color:rgba(255,255,255,.4);font-size:9px;margin-bottom:8px">'
+        +(o.method||'transferencia')+' · 📱 '+(o.tel||'')+' · '+(o.ts?new Date(o.ts).toLocaleString('es-EC'):'sin fecha')
+        +(o.email?' · 📧 '+o.email:'')
+        +'</div>'
+        +'<div style="display:flex;gap:5px;flex-wrap:wrap">'
+        +(st==='pendiente'?
+          '<button onclick="confirmOrderById(\''+o.id+'\')" style="background:#1D9E75;color:#fff;border:none;border-radius:6px;padding:6px 11px;font-size:10px;font-weight:800;cursor:pointer">✅ Confirmar</button>'
+          +'<a href="https://wa.me/593'+String(o.tel||'').replace(/^0/,'')+'" target="_blank" style="background:#25D366;color:#fff;border-radius:6px;padding:6px 11px;font-size:10px;font-weight:700;text-decoration:none">📱 WS</a>'
+          +'<button onclick="rejectOrderById(\''+o.id+'\')" style="background:transparent;color:#ff5555;border:1px solid #3a1515;border-radius:6px;padding:6px 10px;font-size:10px;cursor:pointer">✗ Rechazar</button>'
+        :'')
+        +(o.informeId||o.id?
+          '<a href="?informe='+(o.informeId||o.id)+'" target="_blank" style="background:rgba(29,158,117,.15);color:#1D9E75;border:1px solid #1D9E7540;border-radius:6px;padding:6px 11px;font-size:10px;text-decoration:none">🔗 Ver informe</a>'
+        :'')
+        +'<button onclick="deleteOrderById(\''+o.id+'\')" title="Eliminar pedido" style="background:transparent;color:rgba(255,80,80,.7);border:1px solid #3a1515;border-radius:6px;padding:6px 10px;font-size:10px;cursor:pointer;margin-left:auto">🗑️ Eliminar</button>'
+        +'</div></div>';
     }).join('');
-  return; /* early return — below is dead code now */
-  if(!_adminOrders.length){ return; }
-  listEl.innerHTML=_adminOrders.map(function(o,i){
-    var dt=o.ts?new Date(o.ts).toLocaleString('es-EC'):'';
-    return '<div style="background:#0a1e35;border-radius:8px;padding:10px;margin-bottom:8px;border:1px solid #1a2f47">'
-      +'<div style="color:#fff;font-size:12px;font-weight:700">'+o.empresa+'</div>'
-      +'<div style="color:rgba(255,255,255,.5);font-size:10px">RUC: '+o.ruc+' · '+o.method+' · '+dt+'</div>'
-      +'<div style="color:rgba(255,255,255,.6);font-size:10px;margin-top:2px">📱 WS: '+o.tel+'</div>'
-      +'<div style="display:flex;gap:6px;margin-top:8px">'
-      +'<button onclick="confirmOrder(\''+o.id+'\','+i+')" style="background:var(--teal,#1D9E75);color:#0a1e35;border:none;border-radius:6px;padding:6px 10px;font-size:10px;font-weight:700;cursor:pointer">✅ Confirmar</button>'
-      +'<a href="https://wa.me/593'+o.tel.replace(/^0/,'')+'?text='+encodeURIComponent('Hola! Le enviamos su informe NIIF de '+o.empresa+'. El informe estará adjunto. Gracias por usar DINAMIT 🎉')+'" target="_blank" style="background:#25D366;color:#fff;border-radius:6px;padding:6px 10px;font-size:10px;font-weight:700;text-decoration:none">📱 WS</a>'
-      +'<button onclick="rejectOrder(\''+o.id+'\','+i+')" style="background:#2a1515;color:#ff5555;border:1px solid #3a1515;border-radius:6px;padding:6px 10px;font-size:10px;cursor:pointer">✗ Rechazar</button>'
-      +'</div>'
-      +'</div>';
-  }).join('');
 }
 
 function confirmOrderById(id){
@@ -4598,6 +4729,30 @@ function rejectOrderById(id){
   if(!o){return;}
   var idx=_adminOrders.indexOf(o);
   rejectOrder(idx);
+}
+
+function deleteOrderById(id){
+  if(!confirm('¿Eliminar este pedido? Esta acción no se puede deshacer.')) return;
+  if(typeof firebase!=='undefined'&&firebase.apps&&firebase.apps.length){
+    firebase.firestore().collection('dinamit_orders').doc(id).delete()
+      .then(function(){
+        _adminOrders=_adminOrders.filter(function(o){return o.id!==id;});
+        /* refresh current tab */
+        var el=document.getElementById('admin-tab-content');
+        var tabStats=document.getElementById('tab-stats');
+        if(tabStats&&tabStats.style.background.indexOf('rgb(29, 158')>-1){
+          if(el) renderAdminDashboard(el, _adminOrders);
+        } else {
+          renderAdminOrders();
+        }
+      })
+      .catch(function(e){ alert('Error al eliminar: '+e.message); });
+  } else {
+    _adminOrders=_adminOrders.filter(function(o){return o.id!==id;});
+    var ls=JSON.parse(localStorage.getItem('dinamit_pending')||'[]');
+    localStorage.setItem('dinamit_pending',JSON.stringify(ls.filter(function(o){return o.id!==id;})));
+    renderAdminOrders();
+  }
 }
 
 function confirmOrder(idx){

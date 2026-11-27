@@ -1370,10 +1370,10 @@ async function preloadData(){
         var mm=analisis.match(r); return mm&&mm[1]?mm[1].replace(/[^0-9.,]/g,'').trim():'—';
       }catch(e){return '—';}
     }
-    var ventas=extraerUSD('Ingresos de actividades ordinarias|TOTAL INGRESOS');
-    var utilNeta=extraerUSD('UTILIDAD NETA DEL EJERCICIO|Utilidad Neta');
-    var ebitda=extraerUSD('EBITDA');
-    var totalActivos=extraerUSD('TOTAL ACTIVOS');
+    var ventas=extraerUSD('Ingresos de actividades ordinarias|TOTAL INGRESOS|Ingresos ordinarios|Ingresos Totales|Ventas netas|Ingresos por ventas|Ingresos de Actividades');
+    var utilNeta=extraerUSD('UTILIDAD NETA DEL EJERCICIO|Utilidad Neta|Utilidad neta del período|Resultado del ejercicio|Ganancia neta');
+    var ebitda=extraerUSD('EBITDA|Ebitda');
+    var totalActivos=extraerUSD('TOTAL ACTIVOS|Total de activos|Total Activos');
 
     /* ── PARSEAR TABLAS MARKDOWN → HTML ── */
     function parseMdTable(txt){
@@ -4915,9 +4915,17 @@ function deliverInformeAutomatico(orderId, order){
     +'- 5 recomendaciones accionables priorizadas para mejorar la situación financiera\n'
     +'- Conclusión ejecutiva en 3 líneas\n'
     +'- Próximos pasos sugeridos\n\n'
-    +'IMPORTANTE: Redacta en español profesional. Usa datos referenciales reales del sector ecuatoriano. '
-    +'Menciona la Superintendencia de Compañías, Valores y Seguros del Ecuador. '
-    +'Este informe es para uso ejecutivo directo del cliente. Extensión: 1000-1200 palabras.';
+    +'REGLAS CRÍTICAS DE FORMATO:\n'
+    +'1. SIEMPRE inicia cada sección con exactamente: ═══════════════════════════════════════\n'
+    +'2. Incluye valores numéricos reales en USD para TODAS las líneas del ESF y ERI (no escribas "N/D" ni dejes celdas vacías)\n'
+    +'3. Para los KPIs escribe EXACTAMENTE así en el ERI:\n'
+    +'   Ingresos de actividades ordinarias | $XX,XXX,XXX\n'
+    +'   Utilidad Neta del Ejercicio | $XX,XXX,XXX\n'
+    +'   EBITDA | $XX,XXX,XXX\n'
+    +'   TOTAL ACTIVOS | $XX,XXX,XXX (en el ESF)\n'
+    +'4. Para los 17 ratios usa tabla markdown con columnas: | Ratio | Categoría | Valor | Referencia | Semáforo |\n'
+    +'5. Redacta en español profesional. Menciona la Superintendencia de Compañías Ecuador.\n'
+    +'6. Este informe es para uso ejecutivo directo del cliente. Extensión: 1200-1500 palabras.';
 
   /* Llamar Claude API vía Cloudflare Worker proxy (evita CORS) */
   fetch('https://dinamit-claude-proxy.miterodriguezjoseluis.workers.dev',{
@@ -4996,7 +5004,7 @@ function deliverInformeAutomatico(orderId, order){
     var parte1=analisis.substring(0,corte).trim();
     var parte2=analisis.substring(corte).trim();
 
-    /* Enviar via EmailJS */
+    /* Enviar via EmailJS — solo link, sin texto crudo del informe */
     return emailjs.send('service_c6ew6z4','template_wvkmk7h',{
       to_email:     order.email,
       to_name:      order.empresa,
@@ -5006,8 +5014,8 @@ function deliverInformeAutomatico(orderId, order){
       name:         order.empresa,
       email:        order.email,
       link_informe: linkInforme,
-      s1:           parte1,
-      s2:           parte2,
+      s1:           '',
+      s2:           '',
       s3:           '',
       s4:           '',
       s5:           ''

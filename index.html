@@ -4346,8 +4346,9 @@ function renderAdminOrders(){
     +'<span style="color:#ff5555">✗ '+rejected.length+' rechazados</span>'
     +'</div>'
     +_adminOrders.map(function(o,i){
-      var statusColor=o.status==='entregado'?'#1D9E75':o.status==='rechazado'?'#ff5555':'#F5A623';
-      var statusLabel=o.status==='entregado'?'✅ Entregado':o.status==='rechazado'?'✗ Rechazado':'⏳ Pendiente';
+      var st=o.status||'pendiente';
+      var statusColor=st==='entregado'?'#1D9E75':st==='rechazado'?'#ff5555':'#F5A623';
+      var statusLabel=st==='entregado'?'✅ Entregado':st==='rechazado'?'✗ Rechazado':'⏳ Pendiente';
       return '<div style="background:#0a1e35;border-radius:7px;padding:9px;margin-bottom:7px;border-left:3px solid '+statusColor+'">'
         +'<div style="display:flex;justify-content:space-between;align-items:center">'
         +'<div style="color:#fff;font-size:11px;font-weight:700">'+o.empresa+'</div>'
@@ -4357,9 +4358,9 @@ function renderAdminOrders(){
         +'<div style="color:rgba(255,255,255,.6);font-size:9px;margin-top:1px">📱 '+o.tel+' · '+(o.ts?new Date(o.ts).toLocaleString('es-EC'):'')+'</div>'
         +(o.status==='pendiente'?
           '<div style="display:flex;gap:5px;margin-top:7px">'
-          +'<button onclick="confirmOrder('+i+')" style="background:#1D9E75;color:#fff;border:none;border-radius:5px;padding:5px 9px;font-size:9px;font-weight:700;cursor:pointer">✅ Confirmar</button>'
+          +'<button onclick="confirmOrderById(\''+o.id+'\')" style="background:#1D9E75;color:#fff;border:none;border-radius:5px;padding:5px 9px;font-size:9px;font-weight:700;cursor:pointer">✅ Confirmar</button>'
           +'<a href="https://wa.me/593'+String(o.tel||'').replace(/^0/,'')+'" target="_blank" style="background:#25D366;color:#fff;border-radius:5px;padding:5px 9px;font-size:9px;font-weight:700;text-decoration:none">📱 WS</a>'
-          +'<button onclick="rejectOrder('+i+')" style="background:#2a1515;color:#ff5555;border:1px solid #3a1515;border-radius:5px;padding:5px 9px;font-size:9px;cursor:pointer">✗ Rechazar</button>'
+          +'<button onclick="rejectOrderById(\''+o.id+'\')" style="background:#2a1515;color:#ff5555;border:1px solid #3a1515;border-radius:5px;padding:5px 9px;font-size:9px;cursor:pointer">✗ Rechazar</button>'
           +'</div>':'')
         +'</div>';
     }).join('');
@@ -4380,9 +4381,23 @@ function renderAdminOrders(){
   }).join('');
 }
 
+function confirmOrderById(id){
+  var o=_adminOrders.find(function(x){return x.id===id;});
+  if(!o){console.error('Orden no encontrada:',id);return;}
+  var idx=_adminOrders.indexOf(o);
+  confirmOrder(idx);
+}
+
+function rejectOrderById(id){
+  var o=_adminOrders.find(function(x){return x.id===id;});
+  if(!o){return;}
+  var idx=_adminOrders.indexOf(o);
+  rejectOrder(idx);
+}
+
 function confirmOrder(idx){
   var o=_adminOrders[idx];
-  if(!o){ renderAdminOrders(); return; }
+  if(!o){ console.error('confirmOrder: índice inválido',idx); renderAdminOrders(); return; }
   var id=o.id;
   /* Store unlock immediately */
   var conf=JSON.parse(localStorage.getItem('dinamit_confirmed')||'{}');

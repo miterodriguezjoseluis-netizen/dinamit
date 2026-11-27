@@ -724,7 +724,7 @@ body.theme-light .dsh-sc-item.n .dsh-sc-val{color:#1e293b}
   text-align:center;border-top:0.5px solid var(--gray2);
 }
 </style>
-<!-- EmailJS SDK — reemplaza PUBLIC_KEY con tu clave de EmailJS -->
+<!-- EmailJS SDK -->
 <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
 <script>
   (function(){
@@ -732,6 +732,21 @@ body.theme-light .dsh-sc-item.n .dsh-sc-val{color:#1e293b}
       emailjs.init('WOyL9y4vtyD85Elzz');
     }
   })();
+</script>
+<!-- Firebase SDKs — cargados en <head> para disponibilidad inmediata -->
+<script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-firestore-compat.js"></script>
+<script>
+  firebase.initializeApp({
+    apiKey:"AIzaSyDP5cgHeKh2kGx1hxvH6hrAGOYefxCaTDY",
+    authDomain:"dinamit-3b300.firebaseapp.com",
+    projectId:"dinamit-3b300",
+    storageBucket:"dinamit-3b300.firebasestorage.app",
+    messagingSenderId:"780666344622",
+    appId:"1:780666344622:web:326d4f2c6027a1a8d8093f"
+  });
+  console.log('[DINAMIT] Firebase inicializado OK');
 </script>
 </head>
 <body>
@@ -3015,16 +3030,18 @@ function guardedCmpAB(row){
 (function(){
   var VISIT_KEY='dinamit_visits';
   var LOCAL_BASE=2727;
-  // Mostrar desde localStorage mientras carga Firebase (no mostrar LOCAL_BASE fijo)
+  // Mostrar inmediatamente desde localStorage mientras carga Firebase
   var localStored=parseInt(localStorage.getItem(VISIT_KEY)||'0',10);
   if(!localStored||localStored<LOCAL_BASE) localStored=LOCAL_BASE;
   var SESSION_KEY='dinamit_sess_'+new Date().toDateString();
   var isNewSession=!sessionStorage.getItem(SESSION_KEY);
   if(isNewSession) {
     sessionStorage.setItem(SESSION_KEY,'1');
+    localStored++;
+    localStorage.setItem(VISIT_KEY,localStored);
   }
   var el=document.getElementById('visit-counter');
-  if(el && localStored > LOCAL_BASE) el.textContent=localStored.toLocaleString('es-EC');
+  if(el) el.textContent=localStored.toLocaleString('es-EC');
 
   // Sincronizar con Firestore cuando esté disponible
   function syncWithFirestore(){
@@ -3042,32 +3059,24 @@ function guardedCmpAB(row){
         return tx.get(docRef).then(function(doc){
           var current=doc.exists?(doc.data().total||LOCAL_BASE):LOCAL_BASE;
           var newTotal=current+1;
-          tx.set(docRef,{total:newTotal});
+          tx.set(docRef,{total:newTotal});  /* set completo — más confiable que merge en transacciones */
           return newTotal;
         });
       }).then(function(newVal){
+        // Actualizar localStorage y el display con el valor real de Firestore
         localStorage.setItem(VISIT_KEY,newVal);
         var el2=document.getElementById('visit-counter');
         if(el2) el2.textContent=newVal.toLocaleString('es-EC');
-        console.log('[DINAMIT] Visita registrada. Total:', newVal);
       }).catch(function(e){
-        console.warn('[DINAMIT] Visitas tx error:',e);
-        // fallback: leer sin incrementar
-        docRef.get().then(function(doc){
-          if(doc.exists){
-            var n=doc.data().total||localStored;
-            localStorage.setItem(VISIT_KEY,n);
-            var el2=document.getElementById('visit-counter');
-            if(el2) el2.textContent=n.toLocaleString('es-EC');
-          }
-        }).catch(function(){});
+        console.warn('[DINAMIT] Visitas error:',e);
+        /* fallback: usar el valor local ya mostrado */
       });
     } else {
-      // Solo leer el valor actual de Firestore
+      // Solo leer el valor actual
       docRef.get().then(function(doc){
         if(doc.exists){
           var n=doc.data().total||localStored;
-          if(n>localStored) localStorage.setItem(VISIT_KEY,n);
+          localStorage.setItem(VISIT_KEY,n);
           var el2=document.getElementById('visit-counter');
           if(el2) el2.textContent=n.toLocaleString('es-EC');
         }
@@ -3323,24 +3332,15 @@ function handlePay(){
   /* Gather info from the modal */
   var r=_moOpenRow;
   if(!r){alert('Error: no hay empresa seleccionada.');return;}
+  /* Leer directo del array para evitar que cv() convierta strings a NaN */
   var nm=(Array.isArray(r)?r[3]:rv(r,'nm'))||'Sin nombre';
   var rucN=(Array.isArray(r)?String(r[1]||''):rv(r,'ru'))||'';
   var email=document.getElementById('pay-email-input')?document.getElementById('pay-email-input').value.trim():'';
   var method=document.getElementById('pay-method-sel')?document.getElementById('pay-method-sel').value:'transferencia';
   if(!email||!email.includes('@')){alert('Por favor ingresa tu email para recibir el informe.');return;}
-
-  /* Verificar si ya existe un pedido pendiente con este email */
-  var btn=document.querySelector('[onclick="handlePay()"]');
-  if(btn){ btn.disabled=true; btn.textContent='Verificando...'; }
-
-  function proceedWithOrder(){
-    var order={ruc:rucN,empresa:nm,email:email,method:method,ts:Date.now(),status:'pendiente',year:year};
-    if(btn){ btn.disabled=false; btn.textContent='Confirmar pago'; }
-    notifyWhatsApp(order); /* preparar URL WA antes de guardar */
-    saveOrder(order);
-  }
-
-  proceedWithOrder();
+  var order={ruc:rucN,empresa:nm,email:email,method:method,ts:Date.now(),status:'pendiente',year:year};
+  console.log('[DINAMIT] Guardando orden:',order.empresa, order.ruc, order.status);
+  saveOrder(order);
 }
 
 function notifyWhatsApp(order){
@@ -3388,24 +3388,8 @@ function saveOrder(order){
       showPaySuccess(order);
     }).catch(function(e){
       console.error('Firestore error:',e);
-      /* Reintento una vez más */
-      setTimeout(function(){
-        db.collection('dinamit_orders').add(order).then(function(doc){
-          order.id=doc.id;
-          notifyWhatsApp(order);
-          showPaySuccess(order);
-        }).catch(function(e2){
-          console.error('Firestore reintento fallido:',e2);
-          /* Guardar en localStorage como respaldo */
-          var pending=JSON.parse(localStorage.getItem('dinamit_pending')||'[]');
-          order.id='local_'+Date.now();
-          pending.push(order);
-          localStorage.setItem('dinamit_pending',JSON.stringify(pending));
-          notifyWhatsApp(order);
-          showPaySuccess(order);
-          /* Alertar al admin por WhatsApp de todas formas */
-        });
-      }, 2000);
+      notifyWhatsApp(order);
+      showPaySuccess(order); /* still show success */
     });
   } else {
     /* offline fallback: save to localStorage */
@@ -3413,7 +3397,6 @@ function saveOrder(order){
     order.id='local_'+Date.now();
     pending.push(order);
     localStorage.setItem('dinamit_pending',JSON.stringify(pending));
-    notifyWhatsApp(order);
     showPaySuccess(order);
   }
 }
@@ -3428,7 +3411,7 @@ function showPaySuccess(order){
     +'<div style="background:rgba(29,158,117,.12);border:1px solid rgba(29,158,117,.35);border-radius:10px;padding:12px;margin-bottom:14px;font-size:12px;color:rgba(255,255,255,.8)">'
     +'📧 <strong>'+order.email+'</strong><br><span style="font-size:10.5px;color:rgba(255,255,255,.55)">Ahí recibirás el PDF de forma automática</span></div>'
     +'<div style="font-size:11.5px;color:rgba(255,255,255,.65);margin-bottom:14px;line-height:1.6">Una vez confirmado el pago, recibirás tu informe <strong style="color:#1D9E75">automáticamente en tu email</strong> generado por inteligencia artificial.</div>'
-    +'<a id="wa-notify-btn" href="https://wa.me/593980379867" target="_blank" rel="noopener noreferrer" onclick="var u=window._waNotifyUrl;if(u){this.href=u;}else{this.href=\'https://wa.me/593980379867?text=Hola%2C+acabo+de+registrar+mi+pago+en+DINAMIT\';}return true;" style="display:inline-block;background:#25D366;color:#fff;border:none;border-radius:8px;padding:11px 20px;cursor:pointer;font-size:13px;font-weight:700;text-decoration:none;margin-bottom:10px;width:100%;box-sizing:border-box">📲 Notificar pago por WhatsApp</a>'    +'<br>'    +'<button onclick="closePayModal()" style="background:linear-gradient(135deg,#1D9E75,#15785a);color:#fff;border:none;border-radius:8px;padding:11px 28px;cursor:pointer;font-size:13px;font-weight:700">Entendido</button>'
+    +'<a id="wa-notify-btn" href="#" target="_blank" rel="noopener noreferrer" onclick="this.href=window._waNotifyUrl||'#'" style="display:inline-block;background:#25D366;color:#fff;border:none;border-radius:8px;padding:11px 20px;cursor:pointer;font-size:13px;font-weight:700;text-decoration:none;margin-bottom:10px;width:100%;box-sizing:border-box">📲 Notificar pago por WhatsApp</a>'    +'<br>'    +'<button onclick="closePayModal()" style="background:linear-gradient(135deg,#1D9E75,#15785a);color:#fff;border:none;border-radius:8px;padding:11px 28px;cursor:pointer;font-size:13px;font-weight:700">Entendido</button>'
     +'</div>';
   bg.style.display='flex';
   bg.style.alignItems='center';
@@ -4280,9 +4263,9 @@ function renderAdminDashboard(el,all){
           +'<div style="color:#fff;font-size:11px;font-weight:700">'+o.empresa+'</div>'
           +'<div style="color:rgba(255,255,255,.5);font-size:9px">'+o.ruc+' · '+(o.method||'transferencia')+' · '+(o.ts?new Date(o.ts).toLocaleString('es-EC'):'')+'</div>'
           +'<div style="display:flex;gap:5px;margin-top:7px;flex-wrap:wrap">'
-          +'<button onclick="confirmOrder(\''+o.id+'\','+_adminOrders.indexOf(o)+')" style="background:#1D9E75;color:#fff;border:none;border-radius:5px;padding:5px 9px;font-size:9px;font-weight:700;cursor:pointer">✅ Confirmar</button>'
+          +'<button onclick="confirmOrder('+i+')" style="background:#1D9E75;color:#fff;border:none;border-radius:5px;padding:5px 9px;font-size:9px;font-weight:700;cursor:pointer">✅ Confirmar</button>'
           +'<a href="https://wa.me/593'+String(o.tel||'').replace(/^0/,'')+'" target="_blank" style="background:#25D366;color:#fff;border-radius:5px;padding:5px 9px;font-size:9px;font-weight:700;text-decoration:none">📱 '+o.tel+'</a>'
-          +'<button onclick="rejectOrder(\''+o.id+'\','+_adminOrders.indexOf(o)+')" style="background:#2a1515;color:#ff5555;border:1px solid #3a1515;border-radius:5px;padding:5px 9px;font-size:9px;cursor:pointer">✗</button>'
+          +'<button onclick="rejectOrder('+i+')" style="background:#2a1515;color:#ff5555;border:1px solid #3a1515;border-radius:5px;padding:5px 9px;font-size:9px;cursor:pointer">✗</button>'
           +'</div></div>';
       }).join('')
     )
@@ -4374,9 +4357,9 @@ function renderAdminOrders(){
         +'<div style="color:rgba(255,255,255,.6);font-size:9px;margin-top:1px">📱 '+o.tel+' · '+(o.ts?new Date(o.ts).toLocaleString('es-EC'):'')+'</div>'
         +(o.status==='pendiente'?
           '<div style="display:flex;gap:5px;margin-top:7px">'
-          +'<button onclick="confirmOrder(\''+o.id+'\','+i+')" style="background:#1D9E75;color:#fff;border:none;border-radius:5px;padding:5px 9px;font-size:9px;font-weight:700;cursor:pointer">✅ Confirmar</button>'
+          +'<button onclick="confirmOrder('+i+')" style="background:#1D9E75;color:#fff;border:none;border-radius:5px;padding:5px 9px;font-size:9px;font-weight:700;cursor:pointer">✅ Confirmar</button>'
           +'<a href="https://wa.me/593'+String(o.tel||'').replace(/^0/,'')+'" target="_blank" style="background:#25D366;color:#fff;border-radius:5px;padding:5px 9px;font-size:9px;font-weight:700;text-decoration:none">📱 WS</a>'
-          +'<button onclick="rejectOrder(\''+o.id+'\','+i+')" style="background:#2a1515;color:#ff5555;border:1px solid #3a1515;border-radius:5px;padding:5px 9px;font-size:9px;cursor:pointer">✗ Rechazar</button>'
+          +'<button onclick="rejectOrder('+i+')" style="background:#2a1515;color:#ff5555;border:1px solid #3a1515;border-radius:5px;padding:5px 9px;font-size:9px;cursor:pointer">✗ Rechazar</button>'
           +'</div>':'')
         +'</div>';
     }).join('');
@@ -4397,27 +4380,8 @@ function renderAdminOrders(){
   }).join('');
 }
 
-function confirmOrder(idOrIdx,idx){
-  var o;
-  if(typeof idOrIdx==='number'||(!isNaN(Number(idOrIdx))&&typeof idOrIdx!=='string')){
-    o=_adminOrders[idOrIdx];
-  } else {
-    if(idx!==undefined && idx>=0){ o=_adminOrders[idx]; }
-    if(!o){ o=_adminOrders.find(function(x){return x.id===idOrIdx;}); }
-  }
-  /* Si no está en el array local, buscar en Firestore directamente */
-  if(!o && typeof idOrIdx==='string' && idOrIdx.length>5){
-    firebase.firestore().collection('dinamit_orders').doc(idOrIdx).get().then(function(doc){
-      if(doc.exists){
-        var ord=Object.assign({id:doc.id},doc.data());
-        _adminOrders.push(ord);
-        confirmOrder(idOrIdx, _adminOrders.length-1);
-      } else {
-        renderAdminOrders();
-      }
-    });
-    return;
-  }
+function confirmOrder(idx){
+  var o=_adminOrders[idx];
   if(!o){ renderAdminOrders(); return; }
   var id=o.id;
   /* Store unlock immediately */
@@ -4431,8 +4395,6 @@ function confirmOrder(idOrIdx,idx){
       .update({status:'entregado',confirmedAt:Date.now()})
       .then(function(){
         renderAdminOrders();
-        /* Refrescar stats también */
-        if(typeof loadAdminDashboard==='function'){ loadAdminDashboard(); }
         /* Disparar generación automática del informe con Claude */
         deliverInformeAutomatico(id, o);
       })
@@ -4473,13 +4435,14 @@ function deliverInformeAutomatico(orderId, order){
     +'Formato profesional en español, datos específicos del sector ecuatoriano, '
     +'menciona Superintendencia de Compañías Ecuador. 600-800 palabras.';
 
-  /* Llamar Claude API via Cloudflare Worker proxy (evita CORS) */
-  fetch('https://dinamit-claude-proxy.miterodriguezjoseluis.workers.dev',{
+  /* Llamar Claude API directamente */
+  fetch('https://api.anthropic.com/v1/messages',{
     method:'POST',
     headers:{
       'Content-Type':'application/json',
       'x-api-key': CLAUDE_API_KEY,
-      'anthropic-version':'2023-06-01'
+      'anthropic-version':'2023-06-01',
+      'anthropic-dangerous-allow-browser':'true'
     },
     body:JSON.stringify({
       model:'claude-haiku-4-5-20251001',
@@ -4522,12 +4485,13 @@ function deliverInformeAutomatico(orderId, order){
       +'<div style="padding:0 32px 32px;font-size:13.5px;line-height:1.75;color:#333">'+analisisHTML+'</div>'
       +'<div style="background:#0C1A2E;border-radius:12px;padding:22px;text-align:center;margin:0 32px 28px">'
       +'<div style="color:#fff;font-size:14px;font-weight:700;margin-bottom:8px">📊 Accede al análisis interactivo completo</div>'
-      +'<a href="https://miterodriguezjoseluis-netizen.github.io/dinamit/" style="display:inline-block;background:#1D9E75;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px">Abrir DINAMIT →</a>'
+      +'<a href="https://capable-chimera-ec79bf.netlify.app" style="display:inline-block;background:#1D9E75;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px">Abrir DINAMIT →</a>'
       +'</div>'
       +'<div style="padding:16px 32px;background:#f9f9f9;border-top:1px solid #eee;font-size:11px;color:#999;text-align:center">'
       +'¿Consultas? WhatsApp: <strong>0980379867</strong> · Ing. José Mite Rodríguez CPA<br>'
       +'Generado el '+fecha+' · DINAMIT · RUC 0924158656001'
-      +'</div></div></body></html>';
+      +'</div></div>
+</body></html>';
 
     /* Enviar via EmailJS */
     return emailjs.send('service_c6ew6z4','um2n5m6',{
@@ -4559,24 +4523,8 @@ function deliverInformeAutomatico(orderId, order){
   });
 }
 
-function rejectOrder(idOrIdx,idx){
-  var o;
-  if(typeof idOrIdx==='number'||(!isNaN(Number(idOrIdx))&&typeof idOrIdx!=='string')){
-    o=_adminOrders[idOrIdx];
-  } else {
-    if(idx!==undefined && idx>=0){ o=_adminOrders[idx]; }
-    if(!o){ o=_adminOrders.find(function(x){return x.id===idOrIdx;}); }
-  }
-  if(!o && typeof idOrIdx==='string' && idOrIdx.length>5){
-    firebase.firestore().collection('dinamit_orders').doc(idOrIdx).get().then(function(doc){
-      if(doc.exists){
-        var ord=Object.assign({id:doc.id},doc.data());
-        _adminOrders.push(ord);
-        rejectOrder(idOrIdx, _adminOrders.length-1);
-      }
-    });
-    return;
-  }
+function rejectOrder(idx){
+  var o=_adminOrders[idx];
   if(!o) return;
   if(!confirm('¿Rechazar orden de '+o.empresa+'?')) return;
   o.status='rechazado';
@@ -4995,12 +4943,13 @@ Responde SOLO con el JSON, sin texto adicional.`;
   if(status) status.innerHTML='🤖 Claude IA analizando... <span style="color:#fbbf24">Generando proyecciones NIC 1 y NIIF 18</span>';
 
   try{
-    var resp=await fetch('https://dinamit-claude-proxy.miterodriguezjoseluis.workers.dev',{
+    var resp=await fetch('https://api.anthropic.com/v1/messages',{
       method:'POST',
       headers:{
         'Content-Type':'application/json',
         'x-api-key':CLAUDE_API_KEY,
-        'anthropic-version':'2023-06-01'
+        'anthropic-version':'2023-06-01',
+        'anthropic-dangerous-direct-browser-use':'true'
       },
       body:JSON.stringify({
         model:'claude-haiku-4-5-20251001',

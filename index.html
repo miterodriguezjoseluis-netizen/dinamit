@@ -1356,7 +1356,9 @@ async function preloadData(){
   ═══════════════════════════════════════════════ */
   function renderProyDashboard(data, id){
     var empresa=data.empresa||'';
-    var ruc=data.ruc||'';
+    /* RUC display: Ecuador siempre 13 dígitos — restaurar cero inicial si falta */
+    var ruc=String(data.ruc||'').replace(/\s/g,'').replace(/\.\d+$/,'');
+    if(/^\d+$/.test(ruc)&&ruc.length===12) ruc='0'+ruc;
     var email=data.email||'';
     var año=data.año||'2025';
     var fecha=data.fecha?new Date(data.fecha).toLocaleDateString('es-EC',{day:'2-digit',month:'long',year:'numeric'}):new Date().toLocaleDateString('es-EC',{day:'2-digit',month:'long',year:'numeric'});
@@ -1466,6 +1468,16 @@ textarea{width:100%;padding:9px 12px;background:#091525;border:1px solid #1a3a55
   <!-- Histórico Supercias (si disponible) -->
   ${histBlock}
 
+  <!-- Acceso Informe Plan $1 completo -->
+  <div class="card" style="padding:14px 16px">
+    <div style="font-size:11px;font-weight:700;color:#7ab8d4;margin-bottom:8px">📋 Informe Financiero Completo (Supercias)</div>
+    <div style="font-size:10.5px;color:rgba(255,255,255,.6);margin-bottom:10px">Incluye ratios con semáforo, ESF detallado, ERI y análisis de liquidez · endeudamiento · rentabilidad</div>
+    <button id="btn-informe-toggle" onclick="var s=document.getElementById('informe-completo-sec');var showing=s.style.display!=='none';s.style.display=showing?'none':'block';if(!showing){cargarInformeCompleto();}this.textContent=showing?'📊 Ver Informe Completo Supercias':'▲ Ocultar Informe';" style="width:100%;padding:11px;background:rgba(122,184,212,.12);color:#7ab8d4;border:1px solid rgba(122,184,212,.3);border-radius:9px;font-size:12px;font-weight:700;cursor:pointer">📊 Ver Informe Completo Supercias</button>
+    <div id="informe-completo-sec" style="display:none;margin-top:12px">
+      <div id="informe-completo-inner" style="font-size:11px;color:rgba(255,255,255,.7)">Cargando informe...</div>
+    </div>
+  </div>
+
   <!-- Upload -->
   <div class="card">
     <div style="font-size:12px;font-weight:700;color:#a78bfa;margin-bottom:10px">📂 Sube tu Estado Financiero 2026</div>
@@ -1520,6 +1532,85 @@ var _email='${email}';
 var _año='${año}';
 var _esData25=${esData25?JSON.stringify(esData25):'null'};
 var _esData24=${esData24?JSON.stringify(esData24):'null'};
+var _CLAUDE_API_KEY='sk-ant-api03-xMHiJAVX1GcBwOxr-SrJYbfQJRjKnQJeaGVMXDqpgk-Vb9lGm4DV3gVVS3UFJX2d7VoGUTGDMX1Qgz1XYZA-YN4hkAAA'; /* fallback directo */
+
+/* Renderizar informe completo Supercias dentro del panel plan $10 */
+function cargarInformeCompleto(){
+  var el=document.getElementById('informe-completo-inner');
+  if(!el) return;
+  var esD=_esData25||_esData24;
+  if(!esD){el.innerHTML='<div style="color:rgba(255,255,255,.4);font-size:11px">No hay datos Supercias disponibles para esta empresa.</div>';return;}
+  /* Helpers */
+  function $f(v){if(!v&&v!==0)return '$—';var n=Number(v);if(isNaN(n))return '$—';var s=n<0,a=Math.abs(n);var r=a>=1e9?'$'+(a/1e9).toFixed(2)+'B':a>=1e6?'$'+(a/1e6).toFixed(2)+'M':a>=1e3?'$'+(a/1e3).toFixed(1)+'K':'$'+a.toFixed(0);return s?'('+r+')':r;}
+  function $p(v){if(!v&&v!==0)return '—';var n=Number(v);return isNaN(n)?'—':(n*100).toFixed(1)+'%';}
+  function $x(v){if(!v&&v!==0)return '—';var n=Number(v);return isNaN(n)?'—':n.toFixed(2)+'x';}
+  function sem(v,t){var c=t==='liq'?(v>=1.5?'v':v>=1?'a':'r'):t==='end'?(v<=0.5?'v':v<=0.7?'a':'r'):(v>=0.08?'v':v>=0.03?'a':'r');return c==='v'?'🟢':c==='a'?'🟡':'🔴';}
+  var e=esD;
+  var c1=e.c1||0,c101=e.c101||0,c102=e.c102||0,c10103=e.c10103||0,c10201=e.c10201||0;
+  var c2=e.c2||0,c201=e.c201||0,c202=e.c202||0,c20104=e.c20104||0,c20203=e.c20203||0;
+  var c3=e.c3||0,c401=e.c401||0,c501=e.c501||0,c502=e.c502||0;
+  var gb=e.gb||0,c607=e.c607||0;
+  var ebit=gb-c502;
+  var liq=c201>0?c101/c201:0,acid=c201>0?(c101-c10103)/c201:0;
+  var end=c1>0?c2/c1:0,roe=c3>0?c607/c3:0,roa=c1>0?c607/c1:0;
+  var mgb=c401>0?gb/c401:0,mop=c401>0?ebit/c401:0,mgn=c401>0?c607/c401:0;
+  var html='<div style="background:#091525;border-radius:10px;overflow:hidden;border:1px solid #1a3a55">';
+  /* ESF */
+  html+='<div style="background:#0C1A2E;padding:8px 12px;font-size:10.5px;font-weight:700;color:#1D9E75">ESTADO DE SITUACIÓN FINANCIERA</div>';
+  html+='<table style="width:100%;border-collapse:collapse">';
+  function row(l,v,b,i){return '<tr><td style="padding:5px 10px '+(i?'5px '+(8+i*12)+'px':'5px 10px')+';font-size:10.5px;font-weight:'+(b?700:400)+';color:rgba(255,255,255,'+(b?.9:.75)+')">'+(b&&!i?'<strong>':'')+(l)+(b&&!i?'</strong>':'')+'</td><td style="padding:5px 10px;text-align:right;font-size:10.5px;font-weight:'+(b?700:400)+';color:'+(b?'#fff':'rgba(255,255,255,.7)')+'">'+$f(v)+'</td></tr>';}
+  html+=row('ACTIVO',c1,true)+row('Activo Corriente',c101,false,1)+row('Activo No Corriente',c102,false,1);
+  html+=row('PASIVO',c2,true)+row('Pasivo Corriente',c201,false,1)+row('Pasivo No Corriente',c202,false,1);
+  html+=row('PATRIMONIO',c3,true);
+  html+='</table>';
+  /* ERI */
+  html+='<div style="background:#0C1A2E;padding:8px 12px;font-size:10.5px;font-weight:700;color:#1D9E75;border-top:1px solid #1a3a55">ESTADO DE RESULTADOS</div>';
+  html+='<table style="width:100%;border-collapse:collapse">';
+  html+=row('Ingresos',c401,true)+row('(-) Costo Ventas',c501,false,1)+row('Utilidad Bruta',gb,true)+row('(-) Gastos Operacionales',c502,false,1)+row('★ EBIT',ebit,true)+row('Utilidad Neta',c607,true);
+  html+='</table>';
+  /* Ratios */
+  html+='<div style="background:#0C1A2E;padding:8px 12px;font-size:10.5px;font-weight:700;color:#1D9E75;border-top:1px solid #1a3a55">INDICADORES FINANCIEROS</div>';
+  html+='<table style="width:100%;border-collapse:collapse">';
+  var ratios=[
+    ['Liquidez Corriente',liq,$x(liq),'liq'],['Prueba Ácida',acid,$x(acid),'liq'],
+    ['Endeudamiento Activo',end,$p(end),'end'],['ROE',roe,$p(roe),'roe'],['ROA',roa,$p(roa),'roa'],
+    ['Margen Bruto',mgb,$p(mgb),'mgb'],['Margen Operacional',mop,$p(mop),'mgb'],['Margen Neto',mgn,$p(mgn),'mgb']
+  ];
+  ratios.forEach(function(r){
+    html+='<tr><td style="padding:5px 10px;font-size:10px;color:rgba(255,255,255,.75)">'+sem(r[0],r[3])+' '+r[0]+'</td><td style="padding:5px 10px;text-align:right;font-size:10px;font-weight:700;color:#fff">'+r[2]+'</td></tr>';
+  });
+  html+='</table></div>';
+  el.innerHTML=html;
+}
+
+/* Inicializar informe completo al expandir */
+document.addEventListener('DOMContentLoaded',function(){
+  var btn=document.querySelector('[onclick*="informe-completo-sec"]');
+  if(btn) btn.addEventListener('click',function(){
+    var sec=document.getElementById('informe-completo-sec');
+    if(sec&&sec.style.display!=='none'&&document.getElementById('informe-completo-inner').innerHTML==='Cargando informe...') cargarInformeCompleto();
+  });
+});
+
+async function llamarClaudeIA(prompt){
+  /* Intentar primero el proxy Cloudflare */
+  try{
+    var resp=await fetch('https://dinamit-claude-proxy.miterodriguezjoseluis.workers.dev',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:3000,messages:[{role:'user',content:prompt}]})
+    });
+    if(resp.ok){var d=await resp.json();return d.content&&d.content[0]?d.content[0].text:'';}
+  }catch(e){}
+  /* Fallback: API Anthropic directa */
+  var resp2=await fetch('https://api.anthropic.com/v1/messages',{
+    method:'POST',
+    headers:{'Content-Type':'application/json','x-api-key':_CLAUDE_API_KEY,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+    body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:3000,messages:[{role:'user',content:prompt}]})
+  });
+  if(!resp2.ok) throw new Error('API '+resp2.status);
+  var d2=await resp2.json();
+  return d2.content&&d2.content[0]?d2.content[0].text:'';
+}
 
 function onProyFileExt(input){
   if(input.files&&input.files[0]){
@@ -1579,14 +1670,8 @@ async function runProyExt(){
     +'"oportunidades":["Oportunidad 1","Oportunidad 2"]}';
 
   try{
-    var resp=await fetch('https://dinamit-claude-proxy.miterodriguezjoseluis.workers.dev',{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:3000,messages:[{role:'user',content:prompt}]})
-    });
-    if(!resp.ok) throw new Error('API '+resp.status);
-    var data=await resp.json();
-    var text=data.content&&data.content[0]?data.content[0].text:'';
-    text=text.replace(/\`\`\`json\\n?/g,'').replace(/\`\`\`\\n?/g,'').trim();
+    var text=await llamarClaudeIA(prompt);
+    text=text.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
     var js=text.indexOf('{'), je=text.lastIndexOf('}');
     if(js>=0&&je>=0) text=text.slice(js,je+1);
     _proyDataExt=JSON.parse(text);
@@ -1595,7 +1680,7 @@ async function runProyExt(){
     mostrarResultadosExt(_proyDataExt);
   }catch(e){
     btn.disabled=false;
-    status.innerHTML='<span style="color:#f87171">Error: '+e.message+'</span>';
+    status.innerHTML='<span style="color:#f87171">⚠ Error al conectar con IA: '+e.message+'. Verifica tu conexión e intenta de nuevo.</span>';
   }
 }
 
@@ -1715,7 +1800,8 @@ function descargaExtPDF(){
 
   function renderInformeDashboard(data, id){
     var empresa = data.empresa||'';
-    var ruc     = data.ruc||'';
+    var ruc     = String(data.ruc||'').replace(/\s/g,'').replace(/\.\d+$/,'');
+    if(/^\d+$/.test(ruc)&&ruc.length===12) ruc='0'+ruc;
     var año     = data.año||data.anio||'';
     var fecha   = data.fecha ? new Date(data.fecha).toLocaleDateString('es-EC',{day:'2-digit',month:'long',year:'numeric'}) : new Date().toLocaleDateString('es-EC',{day:'2-digit',month:'long',year:'numeric'});
     var plan    = data.plan||'$1';

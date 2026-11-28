@@ -1481,7 +1481,7 @@ async function preloadData(){
     window._PROY_RENDER_INFORME=renderInformeDashboard;
 
     /* ═══ FUNCIONES GLOBALES plan $10 — deben estar en window (scripts en innerHTML no corren) ═══ */
-    var _CLAUDE_API_KEY_EXT='sk-ant-api03-xMHiJAVX1GcBwOxr-SrJYbfQJRjKnQJeaGVMXDqpgk-Vb9lGm4DV3gVVS3UFJX2d7VoGUTGDMX1Qgz1XYZA-YN4hkAAA';
+    var _CLAUDE_API_KEY_EXT='';
     var _proyFileExt_g=null;
     var _proyDataExt_g=null;
 
@@ -1508,14 +1508,10 @@ async function preloadData(){
     };
 
     window.llamarClaudeIA=async function(prompt){
-      try{
-        var resp=await fetch('https://dinamit-claude-proxy.miterodriguezjoseluis.workers.dev',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:3000,messages:[{role:'user',content:prompt}]})});
-        if(resp.ok){var d=await resp.json();return d.content&&d.content[0]?d.content[0].text:'';}
-      }catch(e){}
-      var resp2=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':_CLAUDE_API_KEY_EXT,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:3000,messages:[{role:'user',content:prompt}]})});
-      if(!resp2.ok) throw new Error('API '+resp2.status);
-      var d2=await resp2.json();
-      return d2.content&&d2.content[0]?d2.content[0].text:'';
+      var resp=await fetch('https://dinamit-claude-proxy.miterodriguezjoseluis.workers.dev',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:4000,messages:[{role:'user',content:prompt}]})});
+      if(!resp.ok){var err=await resp.text();throw new Error('Worker '+resp.status+': '+err);}
+      var d=await resp.json();
+      return d.content&&d.content[0]?d.content[0].text:'';
     };
 
     window.fmt$=function(v){var n=Number(v)||0;var s=n<0;var a=Math.abs(n);var r=a>=1e6?'$'+(a/1e6).toFixed(2)+'M':a>=1e3?'$'+(a/1e3).toFixed(1)+'K':'$'+a.toFixed(0);return s?'('+r+')':r;};

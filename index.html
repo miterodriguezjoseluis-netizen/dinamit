@@ -1354,6 +1354,37 @@ async function preloadData(){
   /* ═══════════════════════════════════════════════
      DASHBOARD PLAN $10 — cliente sube Excel y ve proyecciones
   ═══════════════════════════════════════════════ */
+  /* Carga datos Supercias desde archivos data/ y re-renderiza el dashboard plan $10 */
+  function _cargarSuperciasYRenderizar(data,id,ruc){
+    var _rN=String(ruc).replace(/\s/g,'').replace(/^0+/,'').replace(/\.\d+$/,'');
+    var _base='https://miterodriguezjoseluis-netizen.github.io/dinamit/data/';
+    document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#0C1A2E;font-family:Arial,sans-serif"><div style="text-align:center"><div style="color:#1D9E75;font-size:28px;font-weight:800">&#9889; DINAMIT</div><div style="color:rgba(255,255,255,.5);margin-top:8px;font-size:13px">Cargando datos Supercias...</div><div style="margin-top:20px;width:40px;height:40px;border:4px solid rgba(29,158,117,.2);border-top-color:#1D9E75;border-radius:50%;animation:spin 1s linear infinite;margin-left:auto;margin-right:auto"></div></div><style>@keyframes spin{to{transform:rotate(360deg)}}</style></div>';
+    var _loadPako=function(){return new Promise(function(res){if(typeof pako!=='undefined')return res();var s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js';s.onload=res;document.head.appendChild(s);});};
+    var _decChunk=function(url){return fetch(url).then(function(r){if(!r.ok)return[];return r.text();}).then(function(txt){txt=txt.replace(/[\r\n\t ]/g,'');var n=txt.length,tb=Math.floor(n*3/4);if(txt[n-1]==='=')tb--;if(n>1&&txt[n-2]==='=')tb--;var comp=new Uint8Array(tb),off=0;for(var i=0;i<Math.ceil(n/32760);i++){var raw=atob(txt.slice(i*32760,(i+1)*32760));for(var j=0;j<raw.length&&off<tb;j++)comp[off++]=raw.charCodeAt(j);}var infl=new pako.Inflate({to:'string'});for(var i=0;i<comp.length;i+=65536){var e2=Math.min(i+65536,comp.length);infl.push(comp.slice(i,e2),e2>=comp.length);}if(infl.err)return[];return JSON.parse(infl.result);}).catch(function(){return[];});};
+    var _bs=function(arr,k){var lo=0,hi=arr.length-1;while(lo<=hi){var m=(lo+hi)>>1,v=arr[m][0];if(v===k)return arr[m];v<k?lo=m+1:hi=m-1;}return null;};
+    var _exD=function(row){if(!row)return null;var r=function(k){var FX={c1:6,c101:7,c102:8,c10101:9,c10103:10,c10201:11,c2:12,c201:13,c202:14,c20103:15,c20104:16,c20203:17,c3:18,c30101:19,c401:20,c501:21,c502:22,gb:23,c600:24,c607:25};return((row[FX[k]]||0))/100;};var c1=r('c1'),c101=r('c101'),c102=r('c102'),c10103=r('c10103'),c10201=r('c10201'),c2=r('c2'),c201=r('c201'),c202=r('c202'),c20104=r('c20104'),c20203=r('c20203'),c30101=r('c30101'),c401=r('c401'),c501=r('c501'),c502=r('c502'),gb=r('gb'),c600=r('c600'),c607=r('c607');var c3r=r('c3');var c3=Math.abs(c1-c2-c3r)<1?c3r:c1-c2;return{c1:c1,c101:c101,c102:c102,c10103:c10103,c10201:c10201,c2:c2,c201:c201,c202:c202,c20104:c20104,c20203:c20203,c3:c3,c30101:c30101,c401:c401,c501:c501,c502:c502,gb:gb,c600:c600,c607:c607};};
+    var chunks25=['_bb25c_0','_bb25c_1','_bb25c_2','_bb25c_3','_bb25c_4','_bb25c_5'];
+    var chunks24=['_bb24c_0','_bb24c_1','_bb24c_2','_bb24c_3','_bb24c_4','_bb24c_5'];
+    _loadPako().then(function(){
+      var found25=null,found24=null;
+      /* Buscar en chunks 2025 en secuencia */
+      var p25=Promise.resolve();
+      chunks25.forEach(function(c){p25=p25.then(function(){if(found25)return;return _decChunk(_base+'d'+c.slice(1)+'.txt').then(function(arr){var h=_bs(arr,_rN);if(h)found25=_exD(h);});});});
+      return p25.then(function(){
+        var p24=Promise.resolve();
+        chunks24.forEach(function(c){p24=p24.then(function(){if(found24)return;return _decChunk(_base+'d'+c.slice(1)+'.txt').then(function(arr){var h=_bs(arr,_rN);if(h)found24=_exD(h);});});});
+        return p24;
+      }).then(function(){
+        var newData=Object.assign({},data,{_skipSupercias:true});
+        if(found25)newData.esData=found25;
+        if(found24)newData.esData2=found24;
+        renderProyDashboard(newData,id);
+      });
+    }).catch(function(){
+      renderProyDashboard(Object.assign({},data,{_skipSupercias:true}),id);
+    });
+  }
+
   function renderProyDashboard(data, id){
     var empresa=data.empresa||'';
     /* RUC display: Ecuador siempre 13 dígitos — rellenar ceros iniciales si faltan */
@@ -1374,52 +1405,9 @@ async function preloadData(){
     var esData24=data.esData2||null;
 
     /* Si Firestore no tiene esData (orden antigua), cargar Supercias por RUC y re-renderizar */
-    if(!esData25&&!esData24){
-      var _rN=String(ruc).replace(/\s/g,'').replace(/^0+/,'').replace(/\.\d+$/,'');
-      /* Mostrar loading mientras se busca */
-      document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#0C1A2E;font-family:Arial,sans-serif"><div style="text-align:center"><div style="color:#1D9E75;font-size:28px;font-weight:800">⚡ DINAMIT</div><div style="color:rgba(255,255,255,.5);margin-top:8px;font-size:13px">Cargando datos Supercias...</div><div style="margin-top:20px;width:40px;height:40px;border:4px solid rgba(29,158,117,.2);border-top-color:#1D9E75;border-radius:50%;animation:spin 1s linear infinite;margin-left:auto;margin-right:auto"></div></div><style>@keyframes spin{to{transform:rotate(360deg)}}</style></div>';
-      /* Cargar pako si no existe */
-      function _loadPako(){return new Promise(function(res){if(typeof pako!=='undefined')return res();var s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js';s.onload=res;document.head.appendChild(s);});}
-      /* Decodificar un chunk base64+zlib */
-      async function _decChunk(url){
-        var resp=await fetch(url);
-        if(!resp.ok) return [];
-        var txt=(await resp.text()).replace(/[\r\n\t ]/g,'');
-        var n=txt.length,tb=Math.floor(n*3/4);
-        if(txt[n-1]==='=')tb--;if(n>1&&txt[n-2]==='=')tb--;
-        var comp=new Uint8Array(tb),off=0;
-        for(var i=0;i<Math.ceil(n/32760);i++){var raw=atob(txt.slice(i*32760,(i+1)*32760));for(var j=0;j<raw.length&&off<tb;j++)comp[off++]=raw.charCodeAt(j);}
-        var infl=new pako.Inflate({to:'string'});
-        for(var i=0;i<comp.length;i+=65536){var e2=Math.min(i+65536,comp.length);infl.push(comp.slice(i,e2),e2>=comp.length);}
-        if(infl.err)return [];
-        return JSON.parse(infl.result);
-      }
-      /* Búsqueda binaria */
-      function _bs(arr,k){var lo=0,hi=arr.length-1;while(lo<=hi){var m=(lo+hi)>>1,v=arr[m][0];if(v===k)return arr[m];v<k?lo=m+1:hi=m-1;}return null;}
-      /* Extraer campos financieros de fila */
-      function _exD(row){if(!row)return null;var FX={rn:0,ru:1,ex:2,nm:3,sc:4,ci:5,c1:6,c101:7,c102:8,c10101:9,c10103:10,c10201:11,c2:12,c201:13,c202:14,c20103:15,c20104:16,c20203:17,c3:18,c30101:19,c401:20,c501:21,c502:22,gb:23,c600:24,c607:25};var r=function(k){return((row[FX[k]]||0))/100;};var c1=r('c1'),c101=r('c101'),c102=r('c102');var c10103=r('c10103'),c10201=r('c10201');var c2=r('c2'),c201=r('c201'),c202=r('c202');var c20104=r('c20104'),c20203=r('c20203');var c30101=r('c30101');var c401=r('c401'),c501=r('c501'),c502=r('c502');var gb=r('gb'),c600=r('c600'),c607=r('c607');var c3r=r('c3');var c3=Math.abs(c1-c2-c3r)<1?c3r:c1-c2;return{c1:c1,c101:c101,c102:c102,c10103:c10103,c10201:c10201,c2:c2,c201:c201,c202:c202,c20104:c20104,c20203:c20203,c3:c3,c30101:c30101,c401:c401,c501:c501,c502:c502,gb:gb,c600:c600,c607:c607};}
-      var _base='https://miterodriguezjoseluis-netizen.github.io/dinamit/data/';
-      _loadPako().then(async function(){
-        /* Buscar en cada chunk 2025 hasta encontrar el RUC */
-        var found25=null,found24=null;
-        var chunks25=['_bb25c_0','_bb25c_1','_bb25c_2','_bb25c_3','_bb25c_4','_bb25c_5'];
-        for(var i=0;i<chunks25.length&&!found25;i++){
-          var arr=await _decChunk(_base+'d'+chunks25[i].slice(1)+'.txt');
-          var hit=_bs(arr,_rN); if(hit){found25=_exD(hit);}
-        }
-        var chunks24=['_bb24c_0','_bb24c_1','_bb24c_2','_bb24c_3','_bb24c_4','_bb24c_5'];
-        for(var i=0;i<chunks24.length&&!found24;i++){
-          var arr=await _decChunk(_base+'d'+chunks24[i].slice(1)+'.txt');
-          var hit=_bs(arr,_rN); if(hit){found24=_exD(hit);}
-        }
-        /* Re-renderizar con los datos encontrados */
-        var newData=Object.assign({},data,{esData:found25||undefined,esData2:found24||undefined});
-        renderProyDashboard(newData,id);
-      }).catch(function(){
-        /* Si falla la carga, renderizar sin datos históricos */
-        renderProyDashboard(Object.assign({},data,{esData:null,esData2:null,_skipSupercias:true}),id);
-      });
-      return; /* salir — el re-render lo hará el then() */
+    if(!esData25&&!esData24&&!data._skipSupercias){
+      _cargarSuperciasYRenderizar(data,id,ruc);
+      return;
     }
 
     function fmtH(v){var n=Number(v)||0;var s=n<0;var a=Math.abs(n);var r=a>=1e6?(a/1e6).toFixed(2)+'M':a>=1e3?(a/1e3).toFixed(1)+'K':a.toFixed(0);return s?'('+r+')':r;}
@@ -1490,6 +1478,7 @@ async function preloadData(){
     window._PROY_ID=id;
     window._PROY_HIST=histBlock||'';
     window._PROY_FECHA=fecha||'';
+    window._PROY_RENDER_INFORME=renderInformeDashboard;
 
     document.body.innerHTML=`<!DOCTYPE html><html lang="es"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -1533,10 +1522,7 @@ textarea{width:100%;padding:9px 12px;background:#091525;border:1px solid #1a3a55
   <div class="card" style="padding:14px 16px">
     <div style="font-size:11px;font-weight:700;color:#7ab8d4;margin-bottom:8px">📋 Informe Ejecutivo Supercias</div>
     <div style="font-size:10.5px;color:rgba(255,255,255,.6);margin-bottom:10px">Ratios con semáforo, ESF detallado, ERI y análisis de liquidez · endeudamiento · rentabilidad</div>
-    <button id="btn-informe-toggle" onclick="var s=document.getElementById('informe-completo-sec');var mostrando=s.style.display==='none'||s.style.display==='';s.style.display=mostrando?'block':'none';if(mostrando)cargarInformeCompleto();this.textContent=mostrando?'▲ Ocultar Informe Ejecutivo':'📋 Ver Informe Ejecutivo Supercias';" style="width:100%;padding:11px;background:rgba(122,184,212,.12);color:#7ab8d4;border:1px solid rgba(122,184,212,.3);border-radius:9px;font-size:12px;font-weight:700;cursor:pointer">📋 Ver Informe Ejecutivo Supercias</button>
-    <div id="informe-completo-sec" style="display:none;margin-top:12px">
-      <div id="informe-completo-inner"></div>
-    </div>
+    <button id="btn-informe-toggle" onclick="abrirInformeCompleto();" style="width:100%;padding:11px;background:rgba(122,184,212,.12);color:#7ab8d4;border:1px solid rgba(122,184,212,.3);border-radius:9px;font-size:12px;font-weight:700;cursor:pointer">📋 Ver Informe Ejecutivo Supercias</button>
   </div>
 
   <!-- Upload -->
@@ -1609,53 +1595,35 @@ var _esData24=window._PROY_ES24||null;
 })();
 var _CLAUDE_API_KEY='sk-ant-api03-xMHiJAVX1GcBwOxr-SrJYbfQJRjKnQJeaGVMXDqpgk-Vb9lGm4DV3gVVS3UFJX2d7VoGUTGDMX1Qgz1XYZA-YN4hkAAA';
 
-/* Renderizar informe completo Supercias dentro del panel plan $10 */
-function cargarInformeCompleto(){
-  var el=document.getElementById('informe-completo-inner');
-  if(!el) return;
+/* Abrir informe completo Supercias en nueva pestaña — idéntico al plan $1 */
+function abrirInformeCompleto(){
   var esD=_esData25||_esData24;
-  if(!esD){el.innerHTML='<div style="color:rgba(255,255,255,.4);font-size:11px">No hay datos Supercias disponibles para esta empresa.</div>';return;}
-  /* Helpers */
-  function $f(v){if(!v&&v!==0)return '$—';var n=Number(v);if(isNaN(n))return '$—';var s=n<0,a=Math.abs(n);var r=a>=1e9?'$'+(a/1e9).toFixed(2)+'B':a>=1e6?'$'+(a/1e6).toFixed(2)+'M':a>=1e3?'$'+(a/1e3).toFixed(1)+'K':'$'+a.toFixed(0);return s?'('+r+')':r;}
-  function $p(v){if(!v&&v!==0)return '—';var n=Number(v);return isNaN(n)?'—':(n*100).toFixed(1)+'%';}
-  function $x(v){if(!v&&v!==0)return '—';var n=Number(v);return isNaN(n)?'—':n.toFixed(2)+'x';}
-  function sem(v,t){var c=t==='liq'?(v>=1.5?'v':v>=1?'a':'r'):t==='end'?(v<=0.5?'v':v<=0.7?'a':'r'):(v>=0.08?'v':v>=0.03?'a':'r');return c==='v'?'🟢':c==='a'?'🟡':'🔴';}
-  var e=esD;
-  var c1=e.c1||0,c101=e.c101||0,c102=e.c102||0,c10103=e.c10103||0,c10201=e.c10201||0;
-  var c2=e.c2||0,c201=e.c201||0,c202=e.c202||0,c20104=e.c20104||0,c20203=e.c20203||0;
-  var c3=e.c3||0,c401=e.c401||0,c501=e.c501||0,c502=e.c502||0;
-  var gb=e.gb||0,c607=e.c607||0;
-  var ebit=gb-c502;
-  var liq=c201>0?c101/c201:0,acid=c201>0?(c101-c10103)/c201:0;
-  var end=c1>0?c2/c1:0,roe=c3>0?c607/c3:0,roa=c1>0?c607/c1:0;
-  var mgb=c401>0?gb/c401:0,mop=c401>0?ebit/c401:0,mgn=c401>0?c607/c401:0;
-  var html='<div style="background:#091525;border-radius:10px;overflow:hidden;border:1px solid #1a3a55">';
-  /* ESF */
-  html+='<div style="background:#0C1A2E;padding:8px 12px;font-size:10.5px;font-weight:700;color:#1D9E75">ESTADO DE SITUACIÓN FINANCIERA</div>';
-  html+='<table style="width:100%;border-collapse:collapse">';
-  function row(l,v,b,i){return '<tr><td style="padding:5px 10px '+(i?'5px '+(8+i*12)+'px':'5px 10px')+';font-size:10.5px;font-weight:'+(b?700:400)+';color:rgba(255,255,255,'+(b?.9:.75)+')">'+(b&&!i?'<strong>':'')+(l)+(b&&!i?'</strong>':'')+'</td><td style="padding:5px 10px;text-align:right;font-size:10.5px;font-weight:'+(b?700:400)+';color:'+(b?'#fff':'rgba(255,255,255,.7)')+'">'+$f(v)+'</td></tr>';}
-  html+=row('ACTIVO',c1,true)+row('Activo Corriente',c101,false,1)+row('Activo No Corriente',c102,false,1);
-  html+=row('PASIVO',c2,true)+row('Pasivo Corriente',c201,false,1)+row('Pasivo No Corriente',c202,false,1);
-  html+=row('PATRIMONIO',c3,true);
-  html+='</table>';
-  /* ERI */
-  html+='<div style="background:#0C1A2E;padding:8px 12px;font-size:10.5px;font-weight:700;color:#1D9E75;border-top:1px solid #1a3a55">ESTADO DE RESULTADOS</div>';
-  html+='<table style="width:100%;border-collapse:collapse">';
-  html+=row('Ingresos',c401,true)+row('(-) Costo Ventas',c501,false,1)+row('Utilidad Bruta',gb,true)+row('(-) Gastos Operacionales',c502,false,1)+row('★ EBIT',ebit,true)+row('Utilidad Neta',c607,true);
-  html+='</table>';
-  /* Ratios */
-  html+='<div style="background:#0C1A2E;padding:8px 12px;font-size:10.5px;font-weight:700;color:#1D9E75;border-top:1px solid #1a3a55">INDICADORES FINANCIEROS</div>';
-  html+='<table style="width:100%;border-collapse:collapse">';
-  var ratios=[
-    ['Liquidez Corriente',liq,$x(liq),'liq'],['Prueba Ácida',acid,$x(acid),'liq'],
-    ['Endeudamiento Activo',end,$p(end),'end'],['ROE',roe,$p(roe),'roe'],['ROA',roa,$p(roa),'roa'],
-    ['Margen Bruto',mgb,$p(mgb),'mgb'],['Margen Operacional',mop,$p(mop),'mgb'],['Margen Neto',mgn,$p(mgn),'mgb']
-  ];
-  ratios.forEach(function(r){
-    html+='<tr><td style="padding:5px 10px;font-size:10px;color:rgba(255,255,255,.75)">'+sem(r[0],r[3])+' '+r[0]+'</td><td style="padding:5px 10px;text-align:right;font-size:10px;font-weight:700;color:#fff">'+r[2]+'</td></tr>';
-  });
-  html+='</table></div>';
-  el.innerHTML=html;
+  if(!esD){
+    alert('No hay datos Supercias disponibles para esta empresa.');
+    return;
+  }
+  var renderFn=window._PROY_RENDER_INFORME;
+  if(typeof renderFn!=='function'){
+    alert('Error: función de informe no disponible.');
+    return;
+  }
+  var dataObj={
+    empresa:_empresa,
+    ruc:_ruc,
+    email:_email,
+    año:_año,
+    esData:_esData25||_esData24,
+    esData2:(_esData25&&_esData24)?_esData24:null,
+    plan:'$10'
+  };
+  /* Generar el HTML exacto que plan $1 produce */
+  var htmlInforme=renderFn(dataObj,'',true);
+  /* Abrir nueva pestaña y escribir el HTML */
+  var w=window.open('','_blank');
+  if(!w){alert('Por favor permite ventanas emergentes para ver el informe.');return;}
+  w.document.open();
+  w.document.write(htmlInforme);
+  w.document.close();
 }
 
 
@@ -1865,7 +1833,7 @@ function descargaExtPDF(){
     document.body.innerHTML='<div style="display:flex;align-items:center;justify-content:center;min-height:100vh;background:#0C1A2E;font-family:Arial,sans-serif"><div style="text-align:center;color:#fff"><div style="font-size:48px;margin-bottom:16px">⚠️</div><div style="font-size:18px;font-weight:700">'+msg+'</div><div style="margin-top:24px"><a href="https://miterodriguezjoseluis-netizen.github.io/dinamit/" style="background:#1D9E75;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:700">Ir a DINAMIT</a></div></div></div>';
   }
 
-  function renderInformeDashboard(data, id){
+  function renderInformeDashboard(data, id, returnOnly){
     var empresa = data.empresa||'';
     var ruc     = String(data.ruc||'').replace(/\s/g,'').replace(/\.\d+$/,'');
     if(/^\d+$/.test(ruc)&&ruc.length<13) ruc=ruc.padStart(13,'0');
@@ -2212,6 +2180,7 @@ function descargaExtPDF(){
       +'<\/script>'
       +'</body></html>';
 
+    if(returnOnly) return html;
     document.open(); document.write(html); document.close();
   }
 

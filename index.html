@@ -1530,8 +1530,8 @@ var _ruc='${ruc}';
 var _empresa='${empresa}';
 var _email='${email}';
 var _año='${año}';
-var _esData25=${esData25?JSON.stringify(esData25):'null'};
-var _esData24=${esData24?JSON.stringify(esData24):'null'};
+var _esData25=${esData25?JSON.stringify(esData25).replace(/\x60/g,'\\x60').replace(/\$\{/g,'\\${'):'null'};
+var _esData24=${esData24?JSON.stringify(esData24).replace(/\x60/g,'\\x60').replace(/\$\{/g,'\\${'):'null'};
 var _CLAUDE_API_KEY='sk-ant-api03-xMHiJAVX1GcBwOxr-SrJYbfQJRjKnQJeaGVMXDqpgk-Vb9lGm4DV3gVVS3UFJX2d7VoGUTGDMX1Qgz1XYZA-YN4hkAAA'; /* fallback directo */
 
 /* Renderizar informe completo Supercias dentro del panel plan $10 */
@@ -1671,7 +1671,7 @@ async function runProyExt(){
 
   try{
     var text=await llamarClaudeIA(prompt);
-    text=text.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
+    text=text.replace(/\x60\x60\x60json\n?/g,'').replace(/\x60\x60\x60\n?/g,'').trim();
     var js=text.indexOf('{'), je=text.lastIndexOf('}');
     if(js>=0&&je>=0) text=text.slice(js,je+1);
     _proyDataExt=JSON.parse(text);

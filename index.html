@@ -1430,6 +1430,15 @@ async function preloadData(){
         +'</tbody></table></div>';
     }
 
+    /* Pasar esData via window antes de reemplazar el DOM */
+    window._PROY_ES25=esData25||null;
+    window._PROY_ES24=esData24||null;
+    window._PROY_RUC=ruc;
+    window._PROY_EMP=empresa;
+    window._PROY_EMAIL=email;
+    window._PROY_AÑO=año;
+    window._PROY_ID=id;
+
     document.body.innerHTML=`<!DOCTYPE html><html lang="es"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Proyecciones NIIF — ${empresa}</title>
@@ -1468,13 +1477,13 @@ textarea{width:100%;padding:9px 12px;background:#091525;border:1px solid #1a3a55
   <!-- Histórico Supercias (si disponible) -->
   ${histBlock}
 
-  <!-- Acceso Informe Plan $1 completo -->
+  <!-- Informe Ejecutivo Supercias -->
   <div class="card" style="padding:14px 16px">
-    <div style="font-size:11px;font-weight:700;color:#7ab8d4;margin-bottom:8px">📋 Informe Financiero Completo (Supercias)</div>
-    <div style="font-size:10.5px;color:rgba(255,255,255,.6);margin-bottom:10px">Incluye ratios con semáforo, ESF detallado, ERI y análisis de liquidez · endeudamiento · rentabilidad</div>
-    <button id="btn-informe-toggle" onclick="var s=document.getElementById('informe-completo-sec');var showing=s.style.display!=='none';s.style.display=showing?'none':'block';if(!showing){cargarInformeCompleto();}this.textContent=showing?'📊 Ver Informe Completo Supercias':'▲ Ocultar Informe';" style="width:100%;padding:11px;background:rgba(122,184,212,.12);color:#7ab8d4;border:1px solid rgba(122,184,212,.3);border-radius:9px;font-size:12px;font-weight:700;cursor:pointer">📊 Ver Informe Completo Supercias</button>
+    <div style="font-size:11px;font-weight:700;color:#7ab8d4;margin-bottom:8px">📋 Informe Ejecutivo Supercias</div>
+    <div style="font-size:10.5px;color:rgba(255,255,255,.6);margin-bottom:10px">Ratios con semáforo, ESF detallado, ERI y análisis de liquidez · endeudamiento · rentabilidad</div>
+    <button id="btn-informe-toggle" onclick="var s=document.getElementById('informe-completo-sec');var mostrando=s.style.display==='none'||s.style.display==='';s.style.display=mostrando?'block':'none';if(mostrando)cargarInformeCompleto();this.textContent=mostrando?'▲ Ocultar Informe Ejecutivo':'📋 Ver Informe Ejecutivo Supercias';" style="width:100%;padding:11px;background:rgba(122,184,212,.12);color:#7ab8d4;border:1px solid rgba(122,184,212,.3);border-radius:9px;font-size:12px;font-weight:700;cursor:pointer">📋 Ver Informe Ejecutivo Supercias</button>
     <div id="informe-completo-sec" style="display:none;margin-top:12px">
-      <div id="informe-completo-inner" style="font-size:11px;color:rgba(255,255,255,.7)">Cargando informe...</div>
+      <div id="informe-completo-inner"></div>
     </div>
   </div>
 
@@ -1525,14 +1534,14 @@ textarea{width:100%;padding:9px 12px;background:#091525;border:1px solid #1a3a55
 <script>
 var _proyFileExt=null;
 var _proyDataExt=null;
-var _informeId='${id}';
-var _ruc='${ruc}';
-var _empresa='${empresa}';
-var _email='${email}';
-var _año='${año}';
-var _esData25=${esData25?JSON.stringify(esData25).replace(/\x60/g,'\\x60').replace(/\$\{/g,'\\${'):'null'};
-var _esData24=${esData24?JSON.stringify(esData24).replace(/\x60/g,'\\x60').replace(/\$\{/g,'\\${'):'null'};
-var _CLAUDE_API_KEY='sk-ant-api03-xMHiJAVX1GcBwOxr-SrJYbfQJRjKnQJeaGVMXDqpgk-Vb9lGm4DV3gVVS3UFJX2d7VoGUTGDMX1Qgz1XYZA-YN4hkAAA'; /* fallback directo */
+var _informeId=window._PROY_ID||'';
+var _ruc=window._PROY_RUC||'';
+var _empresa=window._PROY_EMP||'';
+var _email=window._PROY_EMAIL||'';
+var _año=window._PROY_AÑO||'';
+var _esData25=window._PROY_ES25||null;
+var _esData24=window._PROY_ES24||null;
+var _CLAUDE_API_KEY='sk-ant-api03-xMHiJAVX1GcBwOxr-SrJYbfQJRjKnQJeaGVMXDqpgk-Vb9lGm4DV3gVVS3UFJX2d7VoGUTGDMX1Qgz1XYZA-YN4hkAAA';
 
 /* Renderizar informe completo Supercias dentro del panel plan $10 */
 function cargarInformeCompleto(){
@@ -1583,14 +1592,6 @@ function cargarInformeCompleto(){
   el.innerHTML=html;
 }
 
-/* Inicializar informe completo al expandir */
-document.addEventListener('DOMContentLoaded',function(){
-  var btn=document.querySelector('[onclick*="informe-completo-sec"]');
-  if(btn) btn.addEventListener('click',function(){
-    var sec=document.getElementById('informe-completo-sec');
-    if(sec&&sec.style.display!=='none'&&document.getElementById('informe-completo-inner').innerHTML==='Cargando informe...') cargarInformeCompleto();
-  });
-});
 
 async function llamarClaudeIA(prompt){
   /* Intentar primero el proxy Cloudflare */

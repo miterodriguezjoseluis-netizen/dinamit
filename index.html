@@ -1340,7 +1340,8 @@ async function preloadData(){
           if(!doc.exists){ renderInformeError('Informe no encontrado. Verifica el link.'); return; }
           var data=doc.data();
           // Plan $10 — mostrar página de proyecciones (subir Excel/PDF)
-          if(data.plan==='$10'||data.modulo==='proyecciones'){
+          var planParam=params.get('plan');
+          if(data.plan==='$10'||data.modulo==='proyecciones'||planParam==='proy'){
             renderProyDashboard(data, informeId);
           } else {
             renderInformeDashboard(data, informeId);

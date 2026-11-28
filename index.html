@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- DINAMIT v20261128011340 -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -6126,7 +6127,8 @@ function handleProyPay(){
   var row=_moOpenRow;if(!row) return;
   var email=document.getElementById('proy-email-input')?document.getElementById('proy-email-input').value.trim():'';
   if(!email||!email.includes('@')){alert('Por favor ingresa tu email para recibir el Dashboard Ejecutivo + PDF.');return;}
-  var nm=rv(row,'nm')||'',rucN=rv(row,'ru')||'';
+  var nm=rv(row,'nm')||'',rucN=nR(rv(row,'ru')||'');
+  if(!nm&&rucN){ var r2=bs(D[year],rucN); if(r2) nm=rv(r2,'nm')||''; }
   var nm2=nm||rucN;  var order={ruc:rucN,empresa:nm2,email:email,method:'transferencia',ts:Date.now(),status:'pendiente',modulo:'proyecciones',monto:10,year:year};
   saveProyOrder(order);
 }

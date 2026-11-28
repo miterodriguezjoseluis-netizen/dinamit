@@ -1480,6 +1480,29 @@ async function preloadData(){
     window._PROY_FECHA=fecha||'';
     window._PROY_RENDER_INFORME=renderInformeDashboard;
 
+    /* Definir abrirInformeCompleto en window ANTES de innerHTML (los scripts en innerHTML no se ejecutan) */
+    window.abrirInformeCompleto=function(){
+      var esD=window._PROY_ES25||window._PROY_ES24;
+      if(!esD){alert('No hay datos Supercias disponibles para esta empresa.');return;}
+      var renderFn=window._PROY_RENDER_INFORME;
+      if(typeof renderFn!=='function'){alert('Error: función de informe no disponible.');return;}
+      var dataObj={
+        empresa:window._PROY_EMP,
+        ruc:window._PROY_RUC,
+        email:window._PROY_EMAIL,
+        año:window._PROY_AÑO,
+        esData:window._PROY_ES25||window._PROY_ES24,
+        esData2:(window._PROY_ES25&&window._PROY_ES24)?window._PROY_ES24:null,
+        plan:'$10'
+      };
+      var htmlInforme=renderFn(dataObj,'',true);
+      var w=window.open('','_blank');
+      if(!w){alert('Por favor permite ventanas emergentes para ver el informe.');return;}
+      w.document.open();
+      w.document.write(htmlInforme);
+      w.document.close();
+    };
+
     document.body.innerHTML=`<!DOCTYPE html><html lang="es"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Proyecciones NIIF</title>

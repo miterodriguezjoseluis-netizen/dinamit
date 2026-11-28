@@ -1480,27 +1480,116 @@ async function preloadData(){
     window._PROY_FECHA=fecha||'';
     window._PROY_RENDER_INFORME=renderInformeDashboard;
 
-    /* Definir abrirInformeCompleto en window ANTES de innerHTML (los scripts en innerHTML no se ejecutan) */
+    /* ═══ FUNCIONES GLOBALES plan $10 — deben estar en window (scripts en innerHTML no corren) ═══ */
+    var _CLAUDE_API_KEY_EXT='sk-ant-api03-xMHiJAVX1GcBwOxr-SrJYbfQJRjKnQJeaGVMXDqpgk-Vb9lGm4DV3gVVS3UFJX2d7VoGUTGDMX1Qgz1XYZA-YN4hkAAA';
+    var _proyFileExt_g=null;
+    var _proyDataExt_g=null;
+
     window.abrirInformeCompleto=function(){
       var esD=window._PROY_ES25||window._PROY_ES24;
       if(!esD){alert('No hay datos Supercias disponibles para esta empresa.');return;}
       var renderFn=window._PROY_RENDER_INFORME;
       if(typeof renderFn!=='function'){alert('Error: función de informe no disponible.');return;}
-      var dataObj={
-        empresa:window._PROY_EMP,
-        ruc:window._PROY_RUC,
-        email:window._PROY_EMAIL,
-        año:window._PROY_AÑO,
-        esData:window._PROY_ES25||window._PROY_ES24,
-        esData2:(window._PROY_ES25&&window._PROY_ES24)?window._PROY_ES24:null,
-        plan:'$10'
-      };
+      var dataObj={empresa:window._PROY_EMP,ruc:window._PROY_RUC,email:window._PROY_EMAIL,año:window._PROY_AÑO,esData:window._PROY_ES25||window._PROY_ES24,esData2:(window._PROY_ES25&&window._PROY_ES24)?window._PROY_ES24:null,plan:'$10'};
       var htmlInforme=renderFn(dataObj,'',true);
       var w=window.open('','_blank');
       if(!w){alert('Por favor permite ventanas emergentes para ver el informe.');return;}
-      w.document.open();
-      w.document.write(htmlInforme);
-      w.document.close();
+      w.document.open(); w.document.write(htmlInforme); w.document.close();
+    };
+
+    window.onProyFileExt=function(input){
+      if(input.files&&input.files[0]){
+        _proyFileExt_g=input.files[0];
+        var el=document.getElementById('proy-fname-ext');
+        if(el) el.textContent='✅ '+_proyFileExt_g.name+' ('+(_proyFileExt_g.size/1024).toFixed(0)+' KB)';
+        var zone=document.getElementById('proy-zone');
+        if(zone){zone.style.borderColor='#1D9E75';zone.style.background='rgba(29,158,117,.08)';}
+      }
+    };
+
+    window.llamarClaudeIA=async function(prompt){
+      try{
+        var resp=await fetch('https://dinamit-claude-proxy.miterodriguezjoseluis.workers.dev',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:3000,messages:[{role:'user',content:prompt}]})});
+        if(resp.ok){var d=await resp.json();return d.content&&d.content[0]?d.content[0].text:'';}
+      }catch(e){}
+      var resp2=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':_CLAUDE_API_KEY_EXT,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:3000,messages:[{role:'user',content:prompt}]})});
+      if(!resp2.ok) throw new Error('API '+resp2.status);
+      var d2=await resp2.json();
+      return d2.content&&d2.content[0]?d2.content[0].text:'';
+    };
+
+    window.fmt$=function(v){var n=Number(v)||0;var s=n<0;var a=Math.abs(n);var r=a>=1e6?'$'+(a/1e6).toFixed(2)+'M':a>=1e3?'$'+(a/1e3).toFixed(1)+'K':'$'+a.toFixed(0);return s?'('+r+')':r;};
+
+    window.descargaExtPDF=function(){if(!_proyDataExt_g){return;}window.print();};
+
+    window.descargaExtExcel=function(){
+      if(!_proyDataExt_g){return;}
+      var d=_proyDataExt_g,p26=d.proyNIC1_2026||{},p27=d.proyNIIF18_2027||{},op27=p27.actividades_operacion||{};
+      var rows=[['Concepto','2026 NIC 1','2027 NIIF 18'],['Ingresos',p26.ingresos||0,op27.ingresos||0],['Costo Ventas',p26.costo||0,op27.costoVentas||0],['Utilidad Bruta',p26.utilidadBruta||0,op27.utilidadBruta||0],['EBIT',p26.ebit||0,op27.ebit||0],['Utilidad Neta',p26.utilidadNeta||0,p27.utilidadNeta||0],['','',''],['Resumen',d.resumen||'',''],['Supuestos 2026',p26.supuestos||'',''],['Supuestos 2027','',p27.supuestos||'']];
+      var csv='DINAMIT Proyecciones NIIF\n'+(window._PROY_EMP||'')+'  RUC '+(window._PROY_RUC||'')+'\n\n'+rows.map(function(r){return r.join(',');}).join('\n');
+      var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+      var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='Proyecciones_NIIF_'+(window._PROY_EMP||'').replace(/[^a-z0-9]/gi,'_')+'.csv';a.click();
+    };
+
+    window.mostrarResultadosExt=function(d){
+      var el=document.getElementById('proy-results-ext');
+      if(!el) return;
+      var p26=d.proyNIC1_2026||{},p27=d.proyNIIF18_2027||{},op27=p27.actividades_operacion||{},mpm27=p27.mpm||{},ind=d.indicadores||{};
+      var h24=window._PROY_ES24||{},h25=window._PROY_ES25||{};
+      function hv(o,k){return Number(o[k])||0;}
+      function cv(src,k){if(src==='hist24')return hv(h24,k);if(src==='hist25')return hv(h25,k);if(src==='p26'){var m={ingresos:'c401',costo:'c501',gb:'gb',gastosOp:'c502',ebit:'ebit',utilidadNeta:'c607',activo:'c1',pasivo:'c2',patrimonio:'c3'};return Number(p26[m[k]]||p26[k])||0;}if(src==='p27'){return k==='ingresos'?Number(op27.ingresos)||0:k==='costo'?Number(op27.costoVentas)||0:k==='gb'?Number(op27.utilidadBruta)||0:k==='gastosOp'?(Number(op27.gastosVentas)||0)+(Number(op27.gastosAdmin)||0):k==='ebit'?Number(op27.ebit||mpm27.ebit)||0:k==='utilidadNeta'?Number(p27.utilidadNeta)||0:k==='activo'?Number(p27.activoTotal)||0:k==='pasivo'?Number(p27.pasivoTotal)||0:k==='patrimonio'?Number(p27.patrimonioTotal)||0:0;}return 0;}
+      var fmt=window.fmt$;
+      var cols=[{label:'2024',color:'#7ab8d4',src:'hist24'},{label:'2025',color:'#4ade80',src:'hist25'},{label:'2026 NIC 1',color:'#60a5fa',src:'p26'},{label:'2027 NIIF 18',color:'#c4b5fd',src:'p27'}];
+      var colHdrs=cols.map(function(c){return '<th style="text-align:right;padding:8px 10px;font-size:10px;color:'+c.color+'">'+c.label+'</th>';}).join('');
+      var html='<div style="margin-top:16px">';
+      html+='<div style="background:#0C1A2E;border-radius:12px;padding:16px;border:1px solid #1a3a55;margin-bottom:12px"><div style="font-size:11px;font-weight:700;color:#a78bfa;margin-bottom:8px">📊 RESUMEN EJECUTIVO</div><div style="font-size:11.5px;color:rgba(255,255,255,.8);line-height:1.6">'+(d.resumen||'')+'</div></div>';
+      html+='<div style="background:#0C1A2E;border-radius:12px;border:1px solid #1a3a55;overflow:hidden;margin-bottom:12px"><div style="background:linear-gradient(135deg,rgba(29,158,117,.2),rgba(21,101,192,.2));padding:10px 14px;font-size:11px;font-weight:700;color:#fff">📈 HISTÓRICO + PROYECCIONES</div><table style="width:100%;border-collapse:collapse"><thead><tr style="background:rgba(255,255,255,.04)"><th style="text-align:left;padding:8px 10px;font-size:10px;color:rgba(255,255,255,.5)">Concepto</th>'+colHdrs+'</tr></thead><tbody>';
+      var tblRows=[['Ingresos','ingresos',false],['(-) Costo Ventas','costo',false],['Utilidad Bruta','gb',true],['(-) Gastos Op.','gastosOp',false],['★ EBIT','ebit',true],['Utilidad Neta','utilidadNeta',true],['','','sep'],['Activo Total','activo',false],['Pasivo Total','pasivo',false],['Patrimonio','patrimonio',false]];
+      tblRows.forEach(function(r){if(r[2]==='sep'){html+='<tr><td colspan="'+(cols.length+1)+'" style="height:4px;background:rgba(255,255,255,.04)"></td></tr>';return;}var bold=r[2];html+='<tr style="border-bottom:.5px solid rgba(255,255,255,.07)"><td style="padding:7px 10px;font-size:10.5px;font-weight:'+(bold?700:400)+';color:rgba(255,255,255,.8)">'+r[0]+'</td>';cols.forEach(function(c){var v=cv(c.src,r[1]);html+='<td style="text-align:right;padding:7px 10px;font-size:10.5px;font-weight:'+(bold?700:400)+';color:'+(v!==0?c.color:'rgba(255,255,255,.3)')+'">'+fmt(v)+'</td>';});html+='</tr>';});
+      html+='</tbody></table></div>';
+      if(mpm27.ebit){html+='<div style="background:#0C1A2E;border:1px solid rgba(167,139,250,.3);border-radius:12px;padding:14px;margin-bottom:12px"><div style="font-size:10.5px;font-weight:700;color:#a78bfa;margin-bottom:8px">🏛 MPM — NIIF 18 §48-71</div><div style="display:flex;justify-content:space-between;padding:4px 0"><span style="font-size:11px;color:rgba(255,255,255,.7)">EBIT</span><span style="font-size:11px;font-weight:700;color:#a78bfa">'+fmt(mpm27.ebit)+'</span></div><div style="display:flex;justify-content:space-between;padding:4px 0"><span style="font-size:11px;color:rgba(255,255,255,.7)">EBITDA</span><span style="font-size:11px;font-weight:700;color:#a78bfa">'+fmt(mpm27.ebitda)+'</span></div></div>';}
+      html+='<div style="background:#0C1A2E;border-radius:12px;padding:14px;border:1px solid #1a3a55;margin-bottom:12px;font-size:10.5px;color:rgba(255,255,255,.65)"><strong style="color:rgba(255,255,255,.85);display:block;margin-bottom:5px">📋 Supuestos</strong><div><strong style="color:#7ab8d4">2026 NIC 1:</strong> '+(p26.supuestos||'')+'</div><div style="margin-top:4px"><strong style="color:#c4b5fd">2027 NIIF 18:</strong> '+(p27.supuestos||'')+'</div></div>';
+      html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px"><button onclick="descargaExtExcel()" style="padding:12px;background:linear-gradient(135deg,#1D6B45,#1D9E75);color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer">📊 Excel Proyecciones</button><button onclick="descargaExtPDF()" style="padding:12px;background:linear-gradient(135deg,#8B1A1A,#c0392b);color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer">📄 PDF Ejecutivo</button></div></div>';
+      el.innerHTML=html;
+      _proyDataExt_g=d;
+    };
+
+    window.runProyExt=async function(){
+      var btn=document.getElementById('proy-analyze-ext');
+      var status=document.getElementById('proy-status-ext');
+      btn.disabled=true;
+      status.textContent='🤖 Claude IA analizando... Generando proyecciones NIC 1 y NIIF 18';
+      var manualText=(document.getElementById('proy-manual-ext')||{}).value||'';
+      var cutYear=(document.getElementById('proy-cut-ext')||{}).value||'2026';
+      var sector=(document.getElementById('proy-sector-ext')||{}).value||'comercio';
+      var fileContent='';
+      if(_proyFileExt_g){
+        try{
+          if(_proyFileExt_g.name.match(/\.(csv|txt)$/i)){fileContent=await _proyFileExt_g.text();fileContent=fileContent.slice(0,8000);}
+          else if(_proyFileExt_g.name.match(/\.xlsx?$/i)){fileContent='[Excel adjunto: '+_proyFileExt_g.name+']';}
+          else{fileContent='[PDF adjunto: '+_proyFileExt_g.name+']';}
+        }catch(e){}
+      }
+      if(!manualText&&!fileContent){status.innerHTML='<span style="color:#f87171">⚠ Por favor sube un archivo o ingresa datos de 2026</span>';btn.disabled=false;return;}
+      function _h(d,k){return d&&d[k]?d[k]:0;}
+      var h24=window._PROY_ES24||null, h25=window._PROY_ES25||null;
+      var hist24=h24?'HISTÓRICO 2024 SUPERCIAS:\nActivo='+_h(h24,'c1')+' Pasivo='+_h(h24,'c2')+' Patrimonio='+_h(h24,'c3')+' Ingresos='+_h(h24,'c401')+' CostoVentas='+_h(h24,'c501')+' UtilidadBruta='+_h(h24,'gb')+' GastosOp='+_h(h24,'c502')+' UtilidadNeta='+_h(h24,'c607'):'';
+      var hist25=h25?'HISTÓRICO 2025 SUPERCIAS:\nActivo='+_h(h25,'c1')+' Pasivo='+_h(h25,'c2')+' Patrimonio='+_h(h25,'c3')+' Ingresos='+_h(h25,'c401')+' CostoVentas='+_h(h25,'c501')+' UtilidadBruta='+_h(h25,'gb')+' GastosOp='+_h(h25,'c502')+' UtilidadNeta='+_h(h25,'c607'):'';
+      var emp=window._PROY_EMP||'', ruc=window._PROY_RUC||'';
+      var prompt='Eres un experto en NIIF Ecuador (Supercias). Empresa: '+emp+' | RUC: '+ruc+' | Sector: '+sector+'\n\n'+(hist24?hist24+'\n\n':'')+(hist25?hist25+'\n\n':'')+'DATOS REALES 2026 DEL CLIENTE:\n'+(manualText||'')+(fileContent?'\n'+fileContent:'')+'\n\nProyecta 2026 con NIC 1 y 2027 con NIIF 18. Genera SOLO el JSON (sin markdown):\n{"resumen":"Análisis ejecutivo 3 líneas","proyNIC1_2026":{"activo":0,"pasivo":0,"patrimonio":0,"ingresos":0,"costo":0,"utilidadBruta":0,"gastosOp":0,"ebit":0,"utilidadNeta":0,"supuestos":"3 supuestos principales","crecimientoIngresos":"X%"},"proyNIIF18_2027":{"actividades_operacion":{"ingresos":0,"costoVentas":0,"utilidadBruta":0,"gastosVentas":0,"gastosAdmin":0,"ebit":0,"resultado_operacion":0},"actividades_inversion":{"ingresoInversion":0,"gastoInversion":0,"resultado_inversion":0},"actividades_financiacion":{"ingresosFinancieros":0,"gastosFinancieros":0,"resultado_financiacion":0},"mpm":{"ebit":0,"ebitda":0,"margenOperacional":"X%","descripcion":"MPM según NIIF 18"},"utilidadAntesImpuestos":0,"impuestoRenta":0,"utilidadNeta":0,"activoTotal":0,"pasivoTotal":0,"patrimonioTotal":0,"supuestos":"Supuestos NIIF 18","crecimientoIngresos":"X%"},"indicadores":{"2026":{"liquidez":0,"endeudamiento":0,"roe":0,"margenNeto":0},"2027":{"liquidez":0,"endeudamiento":0,"roe":0,"margenNeto":0}},"alertas":["Alerta 1","Alerta 2","Alerta 3"],"oportunidades":["Oportunidad 1","Oportunidad 2"]}';
+      try{
+        var text=await window.llamarClaudeIA(prompt);
+        text=text.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
+        var js=text.indexOf('{'),je=text.lastIndexOf('}');
+        if(js>=0&&je>=0) text=text.slice(js,je+1);
+        var result=JSON.parse(text);
+        status.textContent='';
+        btn.disabled=false;
+        window.mostrarResultadosExt(result);
+      }catch(e){
+        btn.disabled=false;
+        status.innerHTML='<span style="color:#f87171">⚠ Error al conectar con IA: '+e.message+'</span>';
+      }
     };
 
     document.body.innerHTML=`<!DOCTYPE html><html lang="es"><head>

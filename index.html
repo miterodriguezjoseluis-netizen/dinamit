@@ -1400,7 +1400,6 @@ async function preloadData(){
         +hRow('(-) Costo Ventas',['c501'])
         +hRow('Utilidad Bruta',['gb'])
         +hRow('(-) Gastos Op.',['c502'])
-        +hRow('EBIT',['gb','c502'].map?null:0)  // calculado abajo
         +'</tbody></table></div>';
       // Calculamos EBIT manualmente
       function calcEBIT(d){return d?((d.gb||0)-(d.c502||0)):0;}
@@ -1519,8 +1518,8 @@ var _ruc='${ruc}';
 var _empresa='${empresa}';
 var _email='${email}';
 var _año='${año}';
-var _esData25=${JSON.stringify(esData25||null)};
-var _esData24=${JSON.stringify(esData24||null)};
+var _esData25=${esData25?JSON.stringify(esData25):'null'};
+var _esData24=${esData24?JSON.stringify(esData24):'null'};
 
 function onProyFileExt(input){
   if(input.files&&input.files[0]){

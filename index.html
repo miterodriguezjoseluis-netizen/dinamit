@@ -1488,10 +1488,12 @@ async function preloadData(){
     window._PROY_EMAIL=email;
     window._PROY_AÑO=año;
     window._PROY_ID=id;
+    window._PROY_HIST=histBlock||'';
+    window._PROY_FECHA=fecha||'';
 
     document.body.innerHTML=`<!DOCTYPE html><html lang="es"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Proyecciones NIIF — ${empresa}</title>
+<title>Proyecciones NIIF</title>
 <style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:system-ui,-apple-system,sans-serif;background:#0a1e35;color:#fff;min-height:100vh}
 .wrap{max-width:640px;margin:0 auto;padding:20px 16px}
 .hdr{background:#0C1A2E;padding:16px 20px;border-bottom:1px solid #1a3a55;display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;border-radius:12px}
@@ -1516,8 +1518,8 @@ textarea{width:100%;padding:9px 12px;background:#091525;border:1px solid #1a3a55
   <!-- Empresa -->
   <div class="card">
     <div style="font-size:11px;color:rgba(255,255,255,.45);margin-bottom:4px">EMPRESA CONSULTADA</div>
-    <div style="font-size:15px;font-weight:800;color:#fff;margin-bottom:2px">${empresa}</div>
-    <div style="font-size:11px;color:rgba(255,255,255,.45)">RUC ${ruc} · Informe ${fecha}</div>
+    <div id="_emp_lbl" style="font-size:15px;font-weight:800;color:#fff;margin-bottom:2px"></div>
+    <div id="_ruc_lbl" style="font-size:11px;color:rgba(255,255,255,.45)"></div>
     <div style="margin-top:10px;padding:8px 12px;background:rgba(29,158,117,.1);border-radius:8px;border:1px solid rgba(29,158,117,.25)">
       <div style="font-size:10.5px;color:#4ade80;font-weight:700;margin-bottom:3px">✅ Acceso habilitado</div>
       <div style="font-size:10px;color:rgba(255,255,255,.6)">Datos históricos 2024–2025 de Supercias + proyecciones 2026–2027 con tu información real</div>
@@ -1525,7 +1527,7 @@ textarea{width:100%;padding:9px 12px;background:#091525;border:1px solid #1a3a55
   </div>
 
   <!-- Histórico Supercias (si disponible) -->
-  ${histBlock}
+  <div id="_hist_block"></div>
 
   <!-- Informe Ejecutivo Supercias -->
   <div class="card" style="padding:14px 16px">
@@ -1577,7 +1579,7 @@ textarea{width:100%;padding:9px 12px;background:#091525;border:1px solid #1a3a55
   <div id="proy-results-ext"></div>
 
   <div style="text-align:center;margin-top:20px;font-size:10px;color:rgba(255,255,255,.25)">
-    DINAMIT · Proyecciones NIIF Ecuador · ${email}
+    DINAMIT · Proyecciones NIIF Ecuador · <span id="_email_lbl"></span>
   </div>
 </div>
 
@@ -1589,8 +1591,22 @@ var _ruc=window._PROY_RUC||'';
 var _empresa=window._PROY_EMP||'';
 var _email=window._PROY_EMAIL||'';
 var _año=window._PROY_AÑO||'';
+var _fecha=window._PROY_FECHA||'';
 var _esData25=window._PROY_ES25||null;
 var _esData24=window._PROY_ES24||null;
+
+/* Inyectar textos via DOM — evita que caracteres especiales rompan el template literal */
+(function(){
+  var eEl=document.getElementById('_emp_lbl');
+  var rEl=document.getElementById('_ruc_lbl');
+  var hEl=document.getElementById('_hist_block');
+  var mEl=document.getElementById('_email_lbl');
+  if(eEl) eEl.textContent=_empresa;
+  if(rEl) rEl.textContent='RUC '+_ruc+' · Informe '+_fecha;
+  if(hEl) hEl.innerHTML=window._PROY_HIST||'';
+  if(mEl) mEl.textContent=_email;
+  document.title='Proyecciones NIIF — '+_empresa;
+})();
 var _CLAUDE_API_KEY='sk-ant-api03-xMHiJAVX1GcBwOxr-SrJYbfQJRjKnQJeaGVMXDqpgk-Vb9lGm4DV3gVVS3UFJX2d7VoGUTGDMX1Qgz1XYZA-YN4hkAAA';
 
 /* Renderizar informe completo Supercias dentro del panel plan $10 */

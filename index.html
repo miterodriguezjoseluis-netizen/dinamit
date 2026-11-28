@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<!-- DINAMIT v20261128011340 -->
+<!-- DINAMIT v20261128012709 -->
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -5655,7 +5655,11 @@ function confirmOrder(idx){
       .then(function(){
         renderAdminOrders();
         /* Disparar generación automática del informe con Claude */
-        deliverInformeAutomatico(id, o);
+        if(o.modulo==='proyecciones'||o.monto===10||o.monto==='10'){
+          deliverProyAcceso(id, o);
+        } else {
+          deliverInformeAutomatico(id, o);
+        }
       })
       .catch(function(){ renderAdminOrders(); });
   } else {
@@ -5664,6 +5668,67 @@ function confirmOrder(idx){
     if(pi>-1){ pending[pi].status='entregado'; localStorage.setItem('dinamit_pending',JSON.stringify(pending)); }
     renderAdminOrders();
   }
+}
+
+/* Entrega acceso plan $10 — guarda en Firestore y envía link al cliente */
+function deliverProyAcceso(orderId, order){
+  var notif=document.createElement('div');
+  notif.id='deliver-notif-'+orderId;
+  notif.style.cssText='position:fixed;bottom:24px;right:24px;background:#0C1A2E;color:#fff;padding:14px 20px;border-radius:10px;font-size:13px;z-index:9999;border-left:4px solid #a78bfa;max-width:340px;box-shadow:0 4px 20px rgba(0,0,0,.3)';
+  notif.innerHTML='⏳ Habilitando acceso Plan $10 para<br><strong>'+(order.empresa||order.ruc)+'</strong>...';
+  document.body.appendChild(notif);
+
+  var linkInforme='https://miterodriguezjoseluis-netizen.github.io/dinamit/?informe='+orderId+'&plan=proy';
+
+  /* Guardar en dinamit_informes con modulo:proyecciones */
+  var firestoreData={
+    empresa:  order.empresa||order.ruc,
+    ruc:      order.ruc,
+    email:    order.email,
+    año:      String(order.year||new Date().getFullYear()),
+    fecha:    new Date().toISOString(),
+    orderId:  orderId,
+    plan:     '$10',
+    modulo:   'proyecciones',
+    esData:   order.esData||null,
+    esData2:  order.esData2||null
+  };
+
+  var savePromise=Promise.resolve();
+  if(typeof firebase!=='undefined'&&firebase.apps&&firebase.apps.length){
+    savePromise=firebase.firestore().collection('dinamit_informes').doc(orderId).set(firestoreData)
+      .catch(function(e){ console.warn('No se pudo guardar en Firestore:',e); });
+  }
+
+  savePromise.then(function(){
+    if(typeof emailjs==='undefined'||!order.email){
+      notif.remove();
+      alert('✅ Acceso habilitado. Link: '+linkInforme);
+      return;
+    }
+    return emailjs.send('service_c6ew6z4','template_wvkmk7h',{
+      to_email:     order.email,
+      to_name:      order.empresa||order.ruc,
+      empresa:      order.empresa||order.ruc,
+      ruc:          order.ruc,
+      tipo_informe: 'Proyecciones NIIF 18 — Plan $10',
+      name:         order.empresa||order.ruc,
+      email:        order.email,
+      link_informe: linkInforme,
+      s1:'', s2:'', s3:'', s4:'', s5:''
+    });
+  }).then(function(){
+    notif.remove();
+    var ok=document.createElement('div');
+    ok.style.cssText='position:fixed;bottom:24px;right:24px;background:#0C1A2E;color:#fff;padding:16px 22px;border-radius:10px;font-size:13px;z-index:9999;border-left:4px solid #a78bfa;max-width:340px;box-shadow:0 4px 20px rgba(0,0,0,.3)';
+    ok.innerHTML='✅ Acceso Plan $10 habilitado<br><strong>'+(order.email||'')+'</strong><br><small style="opacity:.7">Cliente puede subir sus balances y generar proyecciones NIIF 18</small>';
+    document.body.appendChild(ok);
+    setTimeout(function(){ ok.remove(); },7000);
+  }).catch(function(err){
+    notif.remove();
+    console.error('deliverProyAcceso error:',err);
+    alert('⚠️ Error al enviar acceso plan $10:\n'+err.message);
+  });
 }
 
 /* Genera informe NIIF con Claude API directamente desde el navegador y lo envía por EmailJS */

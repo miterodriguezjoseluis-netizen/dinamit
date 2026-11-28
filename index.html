@@ -53,10 +53,10 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 #splash{position:fixed;inset:0;background:var(--navy);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;transition:opacity .5s}
 .spl-logo{width:68px;height:68px;background:var(--teal);border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:34px;font-weight:800;color:#fff;margin-bottom:18px;box-shadow:0 0 40px rgba(29,158,117,.4)}
 .spl-title{font-size:42px;font-weight:700;color:#fff;margin-bottom:6px}.spl-title span{color:var(--teal)}
-.spl-sub{color:#9ca3af;font-size:13px;margin-bottom:30px}
-.prog-track{width:320px;height:5px;background:var(--navy3);border-radius:3px;overflow:hidden}
+.spl-sub{color:#9ca3af;font-size:13px;margin-bottom:30px;text-align:center;padding:0 12px}
+.prog-track{width:min(320px,80vw);height:5px;background:var(--navy3);border-radius:3px;overflow:hidden}
 .prog-fill{height:5px;background:var(--teal);border-radius:3px;transition:width .3s;width:0}
-#prog-lbl{color:#5DCAA5;font-size:11.5px;margin-top:10px;min-height:18px;text-align:center}
+#prog-lbl{color:#5DCAA5;font-size:11.5px;margin-top:10px;min-height:18px;text-align:center;padding:0 8px;line-height:1.5}
 
 /* NAV */
 nav{background:var(--navy);padding:0 16px;height:52px;display:flex;align-items:center;gap:10px;position:sticky;top:0;z-index:50;border-bottom:1px solid var(--navy3)}
@@ -460,6 +460,10 @@ body.theme-light .dsh-sc-item.n .dsh-sc-val{color:#1e293b}
   .esf-kpi-row{grid-template-columns:1fr}
   .ind-kpi-grid{grid-template-columns:repeat(2,1fr)}
   .esf-breakdown{grid-template-columns:1fr}
+  /* Splash responsive */
+  #splash{padding:0 20px}
+  .spl-title{font-size:32px}
+  .spl-sub{font-size:11px}
 }
 @keyframes spin{to{transform:rotate(360deg)}}
 
@@ -4059,7 +4063,17 @@ if ('serviceWorker' in navigator) {
 
 // ── NAV CSS EXTRA ─────────────────────────────────────────────
 
-document.addEventListener('DOMContentLoaded', loadAll);
+document.addEventListener('DOMContentLoaded', function(){
+  // Timeout: si carga tarda más de 35 seg, avisar
+  var _loadTimeout=setTimeout(function(){
+    var lbl=document.getElementById('prog-lbl');
+    var splash=document.getElementById('splash');
+    if(splash&&splash.style.display!=='none'&&splash.style.opacity!=='0'){
+      if(lbl) lbl.innerHTML='⚠️ La carga tarda más de lo normal.<br><span style="font-size:10px">Prueba <strong>Ctrl+F5</strong> (PC) o <strong>Cmd+Shift+R</strong> (Mac) para recargar sin caché.</span>';
+    }
+  },35000);
+  loadAll().then(function(){ clearTimeout(_loadTimeout); }).catch(function(){ clearTimeout(_loadTimeout); });
+});
 
 // ── HINT CONSULTAS GRATUITAS ───────────────────────────────────────────────
 function _actualizarHintConsultas(){
@@ -5468,8 +5482,18 @@ function _buildAnalyticsUI(el, docs){
 
   var html='';
 
+  // Responsive styles for analytics panel
+  html+='<style>'
+    +'.an-kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}'
+    +'.an-2col{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}'
+    +'@media(max-width:620px){'
+    +'.an-kpi-grid{grid-template-columns:repeat(2,1fr)}'
+    +'.an-2col{grid-template-columns:1fr}'
+    +'}'
+    +'</style>';
+
   // KPIs
-  html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px">';
+  html+='<div class="an-kpi-grid">';
   html+=card('Total consultas',total,'#60a5fa');
   html+=card('Gratuitas',gratis,'#4ade80');
   html+=card('Con pago',pagados,'#a78bfa');
@@ -5477,7 +5501,7 @@ function _buildAnalyticsUI(el, docs){
   html+='</div>';
 
   // Fila 2: por fecha + por día semana
-  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">';
+  html+='<div class="an-2col">';
 
   // Por fecha
   html+='<div style="background:#0C1A2E;border:1px solid #1a3a55;border-radius:10px;padding:12px">';
@@ -5504,7 +5528,7 @@ function _buildAnalyticsUI(el, docs){
   html+='</div>';
 
   // Fila 3: País cliente + Ciudad cliente
-  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">';
+  html+='<div class="an-2col">';
 
   html+='<div style="background:#0C1A2E;border:1px solid #1a3a55;border-radius:10px;padding:12px">';
   html+='<div style="font-size:10.5px;font-weight:700;color:#34d399;margin-bottom:8px">🌍 País del cliente</div>';
@@ -5519,7 +5543,7 @@ function _buildAnalyticsUI(el, docs){
   html+='</div>';
 
   // Fila 4: Provincia empresa + Top empresas
-  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">';
+  html+='<div class="an-2col">';
 
   html+='<div style="background:#0C1A2E;border:1px solid #1a3a55;border-radius:10px;padding:12px">';
   html+='<div style="font-size:10.5px;font-weight:700;color:#fb923c;margin-bottom:8px">🗺 Provincia de la empresa</div>';

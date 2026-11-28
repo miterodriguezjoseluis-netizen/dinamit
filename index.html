@@ -1372,6 +1372,13 @@ async function preloadData(){
     // Tabla histórica Supercias 2024/2025
     var esData25=data.esData||null;
     var esData24=data.esData2||null;
+    /* Si Firestore no tiene esData (orden antigua), buscar en dataset D por RUC */
+    if(!esData25&&!esData24&&typeof D!=='undefined'&&typeof bs==='function'&&typeof nR==='function'){
+      var _rN=nR(ruc);
+      function _exD(row){if(!row)return null;var r=function(k){return(row[F[k]]||0)/100;};var c1=r('c1'),c101=r('c101'),c102=r('c102');var c10103=r('c10103'),c10201=r('c10201');var c2=r('c2'),c201=r('c201'),c202=r('c202');var c20104=r('c20104'),c20203=r('c20203');var c30101=r('c30101');var c401=r('c401'),c501=r('c501'),c502=r('c502');var gb=r('gb'),c600=r('c600'),c607=r('c607');var c3r=r('c3');var c3=Math.abs(c1-c2-c3r)<1?c3r:c1-c2;return{c1:c1,c101:c101,c102:c102,c10103:c10103,c10201:c10201,c2:c2,c201:c201,c202:c202,c20104:c20104,c20203:c20203,c3:c3,c30101:c30101,c401:c401,c501:c501,c502:c502,gb:gb,c600:c600,c607:c607};}
+      if(D['2025']) esData25=_exD(bs(D['2025'],_rN));
+      if(D['2024']) esData24=_exD(bs(D['2024'],_rN));
+    }
     function fmtH(v){var n=Number(v)||0;var s=n<0;var a=Math.abs(n);var r=a>=1e6?(a/1e6).toFixed(2)+'M':a>=1e3?(a/1e3).toFixed(1)+'K':a.toFixed(0);return s?'('+r+')':r;}
     var histBlock='';
     if(esData25||esData24){
@@ -1547,7 +1554,15 @@ var _CLAUDE_API_KEY='sk-ant-api03-xMHiJAVX1GcBwOxr-SrJYbfQJRjKnQJeaGVMXDqpgk-Vb9
 function cargarInformeCompleto(){
   var el=document.getElementById('informe-completo-inner');
   if(!el) return;
-  var esD=_esData25||_esData24;
+  /* Si window vars vacías (orden antigua sin esData), buscar en D por RUC */
+  var _eD25=_esData25,_eD24=_esData24;
+  if(!_eD25&&!_eD24&&_ruc&&typeof D!=='undefined'&&typeof bs==='function'&&typeof nR==='function'){
+    var _rNi=nR(_ruc);
+    function _exDi(row){if(!row)return null;var r=function(k){return(row[F[k]]||0)/100;};var c1=r('c1'),c101=r('c101'),c102=r('c102');var c10103=r('c10103'),c2=r('c2'),c201=r('c201'),c202=r('c202');var c3r=r('c3');var c3=Math.abs(c1-c2-c3r)<1?c3r:c1-c2;var c401=r('c401'),c501=r('c501'),c502=r('c502'),gb=r('gb'),c607=r('c607');return{c1:c1,c101:c101,c102:c102,c10103:c10103,c2:c2,c201:c201,c202:c202,c3:c3,c401:c401,c501:c501,c502:c502,gb:gb,c607:c607};}
+    if(D['2025']) _eD25=_exDi(bs(D['2025'],_rNi));
+    if(D['2024']) _eD24=_exDi(bs(D['2024'],_rNi));
+  }
+  var esD=_eD25||_eD24;
   if(!esD){el.innerHTML='<div style="color:rgba(255,255,255,.4);font-size:11px">No hay datos Supercias disponibles para esta empresa.</div>';return;}
   /* Helpers */
   function $f(v){if(!v&&v!==0)return '$—';var n=Number(v);if(isNaN(n))return '$—';var s=n<0,a=Math.abs(n);var r=a>=1e9?'$'+(a/1e9).toFixed(2)+'B':a>=1e6?'$'+(a/1e6).toFixed(2)+'M':a>=1e3?'$'+(a/1e3).toFixed(1)+'K':'$'+a.toFixed(0);return s?'('+r+')':r;}

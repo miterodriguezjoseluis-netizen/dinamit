@@ -1534,22 +1534,150 @@ async function preloadData(){
     window.mostrarResultadosExt=function(d){
       var el=document.getElementById('proy-results-ext');
       if(!el) return;
-      var p26=d.proyNIC1_2026||{},p27=d.proyNIIF18_2027||{},op27=p27.actividades_operacion||{},mpm27=p27.mpm||{},ind=d.indicadores||{};
+      var p26=d.proyNIC1_2026||{},p27=d.proyNIIF18_2027||{},op27=p27.actividades_operacion||{},inv27=p27.actividades_inversion||{},fin27=p27.actividades_financiacion||{},mpm27=p27.mpm||{},ind=d.indicadores||{};
       var h24=window._PROY_ES24||{},h25=window._PROY_ES25||{};
-      function hv(o,k){return Number(o[k])||0;}
-      function cv(src,k){if(src==='hist24')return hv(h24,k);if(src==='hist25')return hv(h25,k);if(src==='p26'){var m={ingresos:'c401',costo:'c501',gb:'gb',gastosOp:'c502',ebit:'ebit',utilidadNeta:'c607',activo:'c1',pasivo:'c2',patrimonio:'c3'};return Number(p26[m[k]]||p26[k])||0;}if(src==='p27'){return k==='ingresos'?Number(op27.ingresos)||0:k==='costo'?Number(op27.costoVentas)||0:k==='gb'?Number(op27.utilidadBruta)||0:k==='gastosOp'?(Number(op27.gastosVentas)||0)+(Number(op27.gastosAdmin)||0):k==='ebit'?Number(op27.ebit||mpm27.ebit)||0:k==='utilidadNeta'?Number(p27.utilidadNeta)||0:k==='activo'?Number(p27.activoTotal)||0:k==='pasivo'?Number(p27.pasivoTotal)||0:k==='patrimonio'?Number(p27.patrimonioTotal)||0:0;}return 0;}
+      /* ── Mapeo correcto claves esData ── */
+      var _hmap={ingresos:'c401',costo:'c501',gb:'gb',gastosOp:'c502',ebit:'ebit',utilidadNeta:'c607',activo:'c1',pasivo:'c2',patrimonio:'c3',activoCorriente:'c11',activoNoCorriente:'c12',pasivoCorriente:'c21',pasivoNoCorriente:'c22'};
+      function hv(o,k){var rk=_hmap[k]||k;return Number(o[rk])||0;}
+      function cv(src,k){
+        if(src==='hist24') return hv(h24,k);
+        if(src==='hist25') return hv(h25,k);
+        if(src==='p26'){var m=_hmap;return Number(p26[m[k]]||p26[k])||0;}
+        if(src==='p27'){return k==='ingresos'?Number(op27.ingresos)||0:k==='costo'?Number(op27.costoVentas)||0:k==='gb'?Number(op27.utilidadBruta)||0:k==='gastosOp'?(Number(op27.gastosVentas)||0)+(Number(op27.gastosAdmin)||0):k==='ebit'?Number(op27.ebit||mpm27.ebit)||0:k==='utilidadNeta'?Number(p27.utilidadNeta)||0:k==='activo'?Number(p27.activoTotal)||0:k==='pasivo'?Number(p27.pasivoTotal)||0:k==='patrimonio'?Number(p27.patrimonioTotal)||0:0;}
+        return 0;
+      }
       var fmt=window.fmt$;
-      var cols=[{label:'2024',color:'#7ab8d4',src:'hist24'},{label:'2025',color:'#4ade80',src:'hist25'},{label:'2026 NIC 1',color:'#60a5fa',src:'p26'},{label:'2027 NIIF 18',color:'#c4b5fd',src:'p27'}];
-      var colHdrs=cols.map(function(c){return '<th style="text-align:right;padding:8px 10px;font-size:10px;color:'+c.color+'">'+c.label+'</th>';}).join('');
+      function pct(v){return v?(Number(v)*100).toFixed(1)+'%':'-';}
+      function sem(v,inv){var n=Number(v)||0;var good=inv?n<0:n>0;return good?'▲':'▼';}
+      function semC(v,inv){var n=Number(v)||0;var good=inv?n<0:n>0;return good?'#4ade80':'#f87171';}
       var html='<div style="margin-top:16px">';
-      html+='<div style="background:#0C1A2E;border-radius:12px;padding:16px;border:1px solid #1a3a55;margin-bottom:12px"><div style="font-size:11px;font-weight:700;color:#a78bfa;margin-bottom:8px">📊 RESUMEN EJECUTIVO</div><div style="font-size:11.5px;color:rgba(255,255,255,.8);line-height:1.6">'+(d.resumen||'')+'</div></div>';
-      html+='<div style="background:#0C1A2E;border-radius:12px;border:1px solid #1a3a55;overflow:hidden;margin-bottom:12px"><div style="background:linear-gradient(135deg,rgba(29,158,117,.2),rgba(21,101,192,.2));padding:10px 14px;font-size:11px;font-weight:700;color:#fff">📈 HISTÓRICO + PROYECCIONES</div><table style="width:100%;border-collapse:collapse"><thead><tr style="background:rgba(255,255,255,.04)"><th style="text-align:left;padding:8px 10px;font-size:10px;color:rgba(255,255,255,.5)">Concepto</th>'+colHdrs+'</tr></thead><tbody>';
-      var tblRows=[['Ingresos','ingresos',false],['(-) Costo Ventas','costo',false],['Utilidad Bruta','gb',true],['(-) Gastos Op.','gastosOp',false],['★ EBIT','ebit',true],['Utilidad Neta','utilidadNeta',true],['','','sep'],['Activo Total','activo',false],['Pasivo Total','pasivo',false],['Patrimonio','patrimonio',false]];
-      tblRows.forEach(function(r){if(r[2]==='sep'){html+='<tr><td colspan="'+(cols.length+1)+'" style="height:4px;background:rgba(255,255,255,.04)"></td></tr>';return;}var bold=r[2];html+='<tr style="border-bottom:.5px solid rgba(255,255,255,.07)"><td style="padding:7px 10px;font-size:10.5px;font-weight:'+(bold?700:400)+';color:rgba(255,255,255,.8)">'+r[0]+'</td>';cols.forEach(function(c){var v=cv(c.src,r[1]);html+='<td style="text-align:right;padding:7px 10px;font-size:10.5px;font-weight:'+(bold?700:400)+';color:'+(v!==0?c.color:'rgba(255,255,255,.3)')+'">'+fmt(v)+'</td>';});html+='</tr>';});
+
+      /* ── ANÁLISIS IA ── */
+      html+='<div style="background:linear-gradient(135deg,rgba(167,139,250,.15),rgba(29,158,117,.1));border:1px solid rgba(167,139,250,.4);border-radius:12px;padding:14px;margin-bottom:12px">';
+      html+='<div style="font-size:10px;font-weight:700;color:#a78bfa;margin-bottom:6px">🤖 ANÁLISIS IA: DIAGNÓSTICO EJECUTIVO</div>';
+      html+='<div style="font-size:11px;color:rgba(255,255,255,.85);line-height:1.65">'+(d.resumen||'')+'</div></div>';
+
+      /* ── ERI — ESTADO DE RESULTADOS (4 períodos) ── */
+      var cols4=[{label:'2024',sub:'Histórico',color:'#7ab8d4',src:'hist24'},{label:'2025',sub:'Real Supercias',color:'#4ade80',src:'hist25'},{label:'2026',sub:'Proy. NIC 1',color:'#60a5fa',src:'p26'},{label:'2027',sub:'Proy. NIIF 18',color:'#c4b5fd',src:'p27'}];
+      var hdrs4=cols4.map(function(c){return '<th style="text-align:right;padding:6px 8px;font-size:9.5px;color:'+c.color+';font-weight:700">'+c.label+'<div style="font-size:8px;color:rgba(255,255,255,.4);font-weight:400">'+c.sub+'</div></th>';}).join('');
+      html+='<div style="background:#0C1A2E;border-radius:12px;border:1px solid #1a3a55;overflow:hidden;margin-bottom:10px">';
+      html+='<div style="background:linear-gradient(135deg,rgba(96,165,250,.2),rgba(29,158,117,.15));padding:9px 13px;font-size:10.5px;font-weight:700;color:#fff">📋 ESTADO DE RESULTADOS — 4 PERÍODOS</div>';
+      html+='<table style="width:100%;border-collapse:collapse"><thead><tr style="background:rgba(255,255,255,.04)"><th style="text-align:left;padding:7px 10px;font-size:9.5px;color:rgba(255,255,255,.45)">CUENTA</th>'+hdrs4+'</tr></thead><tbody>';
+      var eriRows=[
+        ['Ingresos (401)','ingresos',false],
+        ['Costo Ventas (501)','costo',false],
+        ['Utilidad Bruta (402)','gb',true],
+        ['Gastos Operativos (502)','gastosOp',false],
+        ['★ EBIT (obligatorio NIIF 18)','ebit',true],
+        ['Utilidad Neta (607)','utilidadNeta',true]
+      ];
+      eriRows.forEach(function(r){
+        var bold=r[2];
+        html+='<tr style="border-bottom:.5px solid rgba(255,255,255,.06)"><td style="padding:6px 10px;font-size:10px;font-weight:'+(bold?700:400)+';color:rgba(255,255,255,.8)">'+r[0]+'</td>';
+        cols4.forEach(function(c){var v=cv(c.src,r[1]);html+='<td style="text-align:right;padding:6px 8px;font-size:10px;font-weight:'+(bold?700:400)+';color:'+(v!==0?c.color:'rgba(255,255,255,.25)')+'">'+fmt(v)+'</td>';});
+        html+='</tr>';
+      });
       html+='</tbody></table></div>';
-      if(mpm27.ebit){html+='<div style="background:#0C1A2E;border:1px solid rgba(167,139,250,.3);border-radius:12px;padding:14px;margin-bottom:12px"><div style="font-size:10.5px;font-weight:700;color:#a78bfa;margin-bottom:8px">🏛 MPM — NIIF 18 §48-71</div><div style="display:flex;justify-content:space-between;padding:4px 0"><span style="font-size:11px;color:rgba(255,255,255,.7)">EBIT</span><span style="font-size:11px;font-weight:700;color:#a78bfa">'+fmt(mpm27.ebit)+'</span></div><div style="display:flex;justify-content:space-between;padding:4px 0"><span style="font-size:11px;color:rgba(255,255,255,.7)">EBITDA</span><span style="font-size:11px;font-weight:700;color:#a78bfa">'+fmt(mpm27.ebitda)+'</span></div></div>';}
-      html+='<div style="background:#0C1A2E;border-radius:12px;padding:14px;border:1px solid #1a3a55;margin-bottom:12px;font-size:10.5px;color:rgba(255,255,255,.65)"><strong style="color:rgba(255,255,255,.85);display:block;margin-bottom:5px">📋 Supuestos</strong><div><strong style="color:#7ab8d4">2026 NIC 1:</strong> '+(p26.supuestos||'')+'</div><div style="margin-top:4px"><strong style="color:#c4b5fd">2027 NIIF 18:</strong> '+(p27.supuestos||'')+'</div></div>';
+
+      /* ── ESF — SITUACIÓN FINANCIERA ── */
+      var cols3=[{label:'2025 Real',color:'#4ade80',src:'hist25'},{label:'2026 NIC 1',color:'#60a5fa',src:'p26'},{label:'2027 NIIF 18',color:'#c4b5fd',src:'p27'}];
+      var hdrs3=cols3.map(function(c){return '<th style="text-align:right;padding:6px 8px;font-size:9.5px;color:'+c.color+'">'+c.label+'</th>';}).join('');
+      html+='<div style="background:#0C1A2E;border-radius:12px;border:1px solid #1a3a55;overflow:hidden;margin-bottom:10px">';
+      html+='<div style="background:linear-gradient(135deg,rgba(74,222,128,.15),rgba(21,101,192,.2));padding:9px 13px;font-size:10.5px;font-weight:700;color:#fff">🏦 SITUACIÓN FINANCIERA — ESF PROYECTADO</div>';
+      html+='<table style="width:100%;border-collapse:collapse"><thead><tr style="background:rgba(255,255,255,.04)"><th style="text-align:left;padding:7px 10px;font-size:9.5px;color:rgba(255,255,255,.45)">RUBRO</th>'+hdrs3+'</tr></thead><tbody>';
+      var esfRows=[
+        ['Activo Total (1)','activo',false],
+        ['Pasivo Total (2)','pasivo',false],
+        ['Patrimonio (3)','patrimonio',true]
+      ];
+      esfRows.forEach(function(r){
+        var bold=r[2];
+        html+='<tr style="border-bottom:.5px solid rgba(255,255,255,.06)"><td style="padding:6px 10px;font-size:10px;font-weight:'+(bold?700:400)+';color:rgba(255,255,255,.8)">'+r[0]+'</td>';
+        cols3.forEach(function(c){var v=cv(c.src,r[1]);html+='<td style="text-align:right;padding:6px 8px;font-size:10px;font-weight:'+(bold?700:400)+';color:'+(v!==0?c.color:'rgba(255,255,255,.25)')+'">'+fmt(v)+'</td>';});
+        html+='</tr>';
+      });
+      html+='</tbody></table></div>';
+
+      /* ── NIIF 18 — ERI 2027 CON 3 CATEGORÍAS ── */
+      function niifRow(label,val,color,indent){return '<div style="display:flex;justify-content:space-between;padding:4px '+(indent?'8px':'4px')+';border-bottom:.5px solid rgba(255,255,255,.05)"><span style="font-size:10px;color:rgba(255,255,255,'+(indent?'.65':'.85')+');padding-left:'+(indent?'12px':'0')+'">'+label+'</span><span style="font-size:10px;font-weight:700;color:'+(color||'#fff')+'">'+fmt(val)+'</span></div>';}
+      html+='<div style="background:#0C1A2E;border:1px solid rgba(167,139,250,.35);border-radius:12px;padding:14px;margin-bottom:10px">';
+      html+='<div style="font-size:10.5px;font-weight:700;color:#a78bfa;margin-bottom:10px">⭐ NIIF 18 — ERI 2027: 3 CATEGORÍAS OBLIGATORIAS</div>';
+      /* Operación */
+      html+='<div style="background:rgba(29,158,117,.12);border-radius:8px;padding:8px;margin-bottom:8px"><div style="font-size:9.5px;font-weight:700;color:#4ade80;margin-bottom:6px">🟢 ACTIVIDADES DE OPERACIÓN</div>';
+      html+=niifRow('Ingresos Actividad Ordinaria',Number(op27.ingresos)||0,'#4ade80',true);
+      html+=niifRow('(-) (-) Costo de Ventas',Number(op27.costoVentas)||0,'#f87171',true);
+      html+=niifRow('Utilidad Bruta',Number(op27.utilidadBruta)||0,'#4ade80',false);
+      html+=niifRow('(-) (-) Gastos de Ventas',Number(op27.gastosVentas)||0,'#f87171',true);
+      html+=niifRow('(-) (-) Gastos Administrativos',Number(op27.gastosAdmin)||0,'#f87171',true);
+      html+=niifRow('★ EBIT (Subtotal Obligatorio)',Number(op27.ebit||mpm27.ebit)||0,'#60a5fa',false);
+      html+='</div>';
+      /* Inversión */
+      html+='<div style="background:rgba(96,165,250,.1);border-radius:8px;padding:8px;margin-bottom:8px"><div style="font-size:9.5px;font-weight:700;color:#60a5fa;margin-bottom:6px">🔵 ACTIVIDADES DE INVERSIÓN</div>';
+      html+=niifRow('Ingresos por Inversiones',Number(inv27.ingresoInversion)||0,'#60a5fa',true);
+      html+=niifRow('(-) (-) Gastos de Inversión',Number(inv27.gastoInversion)||0,'#f87171',true);
+      html+=niifRow('Resultado de Inversión',Number(inv27.resultado_inversion)||0,(Number(inv27.resultado_inversion)||0)>=0?'#4ade80':'#f87171',false);
+      html+='</div>';
+      /* Financiación */
+      html+='<div style="background:rgba(248,113,113,.08);border-radius:8px;padding:8px"><div style="font-size:9.5px;font-weight:700;color:#fca5a5;margin-bottom:6px">🔴 ACTIVIDADES DE FINANCIACIÓN</div>';
+      html+=niifRow('Ingresos Financieros',Number(fin27.ingresosFinancieros)||0,'#fca5a5',true);
+      html+=niifRow('(-) (-) Gastos Financieros',Number(fin27.gastosFinancieros)||0,'#f87171',true);
+      html+=niifRow('Resultado de Financiación',Number(fin27.resultado_financiacion)||0,(Number(fin27.resultado_financiacion)||0)>=0?'#4ade80':'#f87171',false);
+      html+='</div></div>';
+
+      /* ── MPM §48-71 ── */
+      if(mpm27.ebit||mpm27.ebitda){
+        html+='<div style="background:#0C1A2E;border:1px solid rgba(167,139,250,.3);border-radius:12px;padding:12px;margin-bottom:10px">';
+        html+='<div style="font-size:10px;font-weight:700;color:#a78bfa;margin-bottom:8px">🏛 MPM — MEDIDAS RENDIMIENTO GESTIÓN (NIIF 18 §48-71)</div>';
+        html+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:.5px solid rgba(255,255,255,.07)"><span style="font-size:10.5px;color:rgba(255,255,255,.7)">EBIT</span><span style="font-size:10.5px;font-weight:700;color:#a78bfa">'+fmt(Number(mpm27.ebit)||0)+'</span></div>';
+        html+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:.5px solid rgba(255,255,255,.07)"><span style="font-size:10.5px;color:rgba(255,255,255,.7)">EBITDA</span><span style="font-size:10.5px;font-weight:700;color:#a78bfa">'+fmt(Number(mpm27.ebitda)||0)+'</span></div>';
+        if(mpm27.margenOperacional){html+='<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:.5px solid rgba(255,255,255,.07)"><span style="font-size:10.5px;color:rgba(255,255,255,.7)">Margen Operacional</span><span style="font-size:10.5px;font-weight:700;color:#a78bfa">'+mpm27.margenOperacional+'</span></div>';}
+        if(mpm27.descripcion){html+='<div style="font-size:9.5px;color:rgba(255,255,255,.5);margin-top:6px;line-height:1.5">'+mpm27.descripcion+'</div>';}
+        html+='</div>';
+      }
+
+      /* ── INDICADORES CON SEMÁFORO ── */
+      var i26=ind['2026']||{},i27=ind['2027']||{};
+      var i25={liquidez:hv(h25,'activoCorriente')/(hv(h25,'pasivoCorriente')||1),endeudamiento:hv(h25,'pasivo')/(hv(h25,'activo')||1)*100,roe:hv(h25,'utilidadNeta')/(hv(h25,'patrimonio')||1)*100,margenNeto:hv(h25,'utilidadNeta')/(hv(h25,'ingresos')||1)*100};
+      function indCard(title,k25,k26,k27,inv,suf){
+        var v5=Number(typeof k25==='object'?k25.v:i25[k25])||0,v6=Number(i26[k26||k25])||0,v7=Number(i27[k27||k25])||0;
+        var trend=v7-v5;var sc=semC(trend,inv);var si=sem(trend,inv);
+        return '<div style="background:rgba(255,255,255,.04);border-radius:10px;padding:10px"><div style="font-size:9px;color:rgba(255,255,255,.5);margin-bottom:5px">'+title+'</div><div style="display:flex;align-items:flex-end;gap:8px"><div><div style="font-size:8.5px;color:#4ade80;margin-bottom:1px">2025</div><div style="font-size:11px;font-weight:700;color:#4ade80">'+(v5?v5.toFixed(2)+(suf||''):'–')+'</div></div><div><div style="font-size:8.5px;color:#60a5fa;margin-bottom:1px">2026</div><div style="font-size:11px;font-weight:700;color:#60a5fa">'+(v6?v6.toFixed(2)+(suf||''):'–')+'</div></div><div><div style="font-size:8.5px;color:#c4b5fd;margin-bottom:1px">2027</div><div style="font-size:11px;font-weight:700;color:#c4b5fd">'+(v7?v7.toFixed(2)+(suf||''):'–')+'</div></div><div style="margin-left:auto;font-size:18px;color:'+sc+'">'+si+'</div></div></div>';
+      }
+      html+='<div style="background:#0C1A2E;border-radius:12px;padding:12px;border:1px solid #1a3a55;margin-bottom:10px">';
+      html+='<div style="font-size:10px;font-weight:700;color:#fff;margin-bottom:10px">📈 INDICADORES — TENDENCIA 3 AÑOS</div>';
+      html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+      html+=indCard('Liquidez Corriente','liquidez','liquidez','liquidez',false,'x');
+      html+=indCard('Endeudamiento %','endeudamiento','endeudamiento','endeudamiento',true,'%');
+      html+=indCard('ROE %','roe','roe','roe',false,'%');
+      html+=indCard('Margen Neto %','margenNeto','margenNeto','margenNeto',false,'%');
+      html+='</div></div>';
+
+      /* ── ALERTAS ── */
+      if(d.alertas&&d.alertas.length){
+        html+='<div style="background:#0C1A2E;border:1px solid rgba(248,113,113,.4);border-radius:12px;padding:12px;margin-bottom:10px">';
+        html+='<div style="font-size:10px;font-weight:700;color:#f87171;margin-bottom:8px">⚠ ALERTAS</div>';
+        d.alertas.forEach(function(a){html+='<div style="font-size:10px;color:rgba(255,255,255,.75);padding:3px 0;border-bottom:.5px solid rgba(255,255,255,.05)">• '+a+'</div>';});
+        html+='</div>';
+      }
+
+      /* ── OPORTUNIDADES ── */
+      if(d.oportunidades&&d.oportunidades.length){
+        html+='<div style="background:#0C1A2E;border:1px solid rgba(74,222,128,.35);border-radius:12px;padding:12px;margin-bottom:10px">';
+        html+='<div style="font-size:10px;font-weight:700;color:#4ade80;margin-bottom:8px">💡 OPORTUNIDADES</div>';
+        d.oportunidades.forEach(function(o){html+='<div style="font-size:10px;color:rgba(255,255,255,.75);padding:3px 0;border-bottom:.5px solid rgba(255,255,255,.05)">• '+o+'</div>';});
+        html+='</div>';
+      }
+
+      /* ── SUPUESTOS ── */
+      html+='<div style="background:#0C1A2E;border-radius:12px;padding:12px;border:1px solid #1a3a55;margin-bottom:12px">';
+      html+='<div style="font-size:10px;font-weight:700;color:rgba(255,255,255,.85);margin-bottom:8px">📋 SUPUESTOS DE PROYECCIÓN</div>';
+      if(p26.supuestos){html+='<div style="margin-bottom:6px"><div style="font-size:9px;color:#60a5fa;font-weight:700;margin-bottom:3px">2026 NIC 1:</div><div style="font-size:10px;color:rgba(255,255,255,.65);line-height:1.5">'+p26.supuestos+'</div></div>';}
+      if(p27.supuestos){html+='<div><div style="font-size:9px;color:#c4b5fd;font-weight:700;margin-bottom:3px">2027 NIIF 18:</div><div style="font-size:10px;color:rgba(255,255,255,.65);line-height:1.5">'+p27.supuestos+'</div></div>';}
+      html+='</div>';
+
+      /* ── BOTONES ── */
       html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px"><button onclick="descargaExtExcel()" style="padding:12px;background:linear-gradient(135deg,#1D6B45,#1D9E75);color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer">📊 Excel Proyecciones</button><button onclick="descargaExtPDF()" style="padding:12px;background:linear-gradient(135deg,#8B1A1A,#c0392b);color:#fff;border:none;border-radius:10px;font-size:12px;font-weight:700;cursor:pointer">📄 PDF Ejecutivo</button></div></div>';
+
       el.innerHTML=html;
       _proyDataExt_g=d;
     };
@@ -1573,11 +1701,11 @@ async function preloadData(){
       function _h(d,k){return d&&d[k]?d[k]:0;}
       var h24=window._PROY_ES24||null, h25=window._PROY_ES25||null;
       if(!manualText&&!fileContent&&!h24&&!h25){status.innerHTML='<span style="color:#f87171">⚠ Por favor sube un archivo o ingresa datos de 2026</span>';btn.disabled=false;return;}
-      var hist24=h24?'HISTÓRICO 2024 SUPERCIAS (valores reales en USD, no estimes):\nActivo='+_h(h24,'c1')+' Pasivo='+_h(h24,'c2')+' Patrimonio='+_h(h24,'c3')+' Ingresos='+_h(h24,'c401')+' CostoVentas='+_h(h24,'c501')+' UtilidadBruta='+_h(h24,'gb')+' GastosOp='+_h(h24,'c502')+' UtilidadNeta='+_h(h24,'c607'):'';
-      var hist25=h25?'HISTÓRICO 2025 SUPERCIAS (valores reales en USD, no estimes):\nActivo='+_h(h25,'c1')+' Pasivo='+_h(h25,'c2')+' Patrimonio='+_h(h25,'c3')+' Ingresos='+_h(h25,'c401')+' CostoVentas='+_h(h25,'c501')+' UtilidadBruta='+_h(h25,'gb')+' GastosOp='+_h(h25,'c502')+' UtilidadNeta='+_h(h25,'c607'):'';
-      var datosCliente=manualText||fileContent?'DATOS ADICIONALES 2026 DEL CLIENTE:\n'+(manualText||'')+(fileContent?'\n'+fileContent:''):'NO HAY DATOS 2026 DEL CLIENTE — proyecta 2026 y 2027 basándote EXCLUSIVAMENTE en la tendencia del histórico 2024-2025 de Supercias.';
+      var hist24=h24?'HISTÓRICO 2024 SUPERCIAS (USD reales, NO estimes):\nActivo='+_h(h24,'c1')+' ActivoCte='+_h(h24,'c11')+' ActivoNoCte='+_h(h24,'c12')+'\nPasivo='+_h(h24,'c2')+' PasivoCte='+_h(h24,'c21')+' PasivoNoCte='+_h(h24,'c22')+'\nPatrimonio='+_h(h24,'c3')+'\nIngresos='+_h(h24,'c401')+' CostoVentas='+_h(h24,'c501')+' UtilidadBruta='+_h(h24,'gb')+'\nGastosOp='+_h(h24,'c502')+' EBIT='+_h(h24,'ebit')+' UtilidadNeta='+_h(h24,'c607'):'';
+      var hist25=h25?'HISTÓRICO 2025 SUPERCIAS (USD reales, NO estimes):\nActivo='+_h(h25,'c1')+' ActivoCte='+_h(h25,'c11')+' ActivoNoCte='+_h(h25,'c12')+'\nPasivo='+_h(h25,'c2')+' PasivoCte='+_h(h25,'c21')+' PasivoNoCte='+_h(h25,'c22')+'\nPatrimonio='+_h(h25,'c3')+'\nIngresos='+_h(h25,'c401')+' CostoVentas='+_h(h25,'c501')+' UtilidadBruta='+_h(h25,'gb')+'\nGastosOp='+_h(h25,'c502')+' EBIT='+_h(h25,'ebit')+' UtilidadNeta='+_h(h25,'c607'):'';
+      var datosCliente=manualText||fileContent?'DATOS ADICIONALES 2026 DEL CLIENTE:\n'+(manualText||'')+(fileContent?'\n'+fileContent:''):'SIN DATOS 2026 DEL CLIENTE — proyecta 2026 y 2027 EXCLUSIVAMENTE por tendencia del histórico 2024-2025 de Supercias.';
       var emp=window._PROY_EMP||'', ruc=window._PROY_RUC||'';
-      var prompt='Eres un experto en NIIF Ecuador (Supercias). Empresa: '+emp+' | RUC: '+ruc+' | Sector: '+sector+'\n\n'+(hist24?hist24+'\n\n':'')+(hist25?hist25+'\n\n':'')+datosCliente+'\n\nProyecta 2026 con NIC 1 y 2027 con NIIF 18. Genera SOLO el JSON (sin markdown):\n{"resumen":"Análisis ejecutivo 3 líneas","proyNIC1_2026":{"activo":0,"pasivo":0,"patrimonio":0,"ingresos":0,"costo":0,"utilidadBruta":0,"gastosOp":0,"ebit":0,"utilidadNeta":0,"supuestos":"3 supuestos principales","crecimientoIngresos":"X%"},"proyNIIF18_2027":{"actividades_operacion":{"ingresos":0,"costoVentas":0,"utilidadBruta":0,"gastosVentas":0,"gastosAdmin":0,"ebit":0,"resultado_operacion":0},"actividades_inversion":{"ingresoInversion":0,"gastoInversion":0,"resultado_inversion":0},"actividades_financiacion":{"ingresosFinancieros":0,"gastosFinancieros":0,"resultado_financiacion":0},"mpm":{"ebit":0,"ebitda":0,"margenOperacional":"X%","descripcion":"MPM según NIIF 18"},"utilidadAntesImpuestos":0,"impuestoRenta":0,"utilidadNeta":0,"activoTotal":0,"pasivoTotal":0,"patrimonioTotal":0,"supuestos":"Supuestos NIIF 18","crecimientoIngresos":"X%"},"indicadores":{"2026":{"liquidez":0,"endeudamiento":0,"roe":0,"margenNeto":0},"2027":{"liquidez":0,"endeudamiento":0,"roe":0,"margenNeto":0}},"alertas":["Alerta 1","Alerta 2","Alerta 3"],"oportunidades":["Oportunidad 1","Oportunidad 2"]}';
+      var prompt='Eres un experto en NIIF Ecuador (Supercias). Empresa: '+emp+' | RUC: '+ruc+' | Sector: '+sector+'\n\n'+(hist24?hist24+'\n\n':'')+(hist25?hist25+'\n\n':'')+datosCliente+'\n\nProyecta 2026 con NIC 1 (actualización norma vigente) y 2027 con NIIF 18 (3 categorías obligatorias: operación, inversión, financiación + MPM §48-71). Calcula indicadores reales (liquidez=activoCorriente/pasivoCorriente, endeudamiento=pasivo/activo*100, ROE=utilidadNeta/patrimonio*100, margenNeto=utilidadNeta/ingresos*100). Genera SOLO JSON sin markdown:\n{"resumen":"Diagnóstico ejecutivo 3-4 líneas con cifras clave y tendencia","proyNIC1_2026":{"activo":0,"pasivo":0,"patrimonio":0,"activoCorriente":0,"pasivoCorriente":0,"ingresos":0,"costo":0,"utilidadBruta":0,"gastosOp":0,"ebit":0,"utilidadNeta":0,"supuestos":"3 supuestos con % concretos","crecimientoIngresos":"X%"},"proyNIIF18_2027":{"actividades_operacion":{"ingresos":0,"costoVentas":0,"utilidadBruta":0,"gastosVentas":0,"gastosAdmin":0,"ebit":0},"actividades_inversion":{"ingresoInversion":0,"gastoInversion":0,"resultado_inversion":0},"actividades_financiacion":{"ingresosFinancieros":0,"gastosFinancieros":0,"resultado_financiacion":0},"mpm":{"ebit":0,"ebitda":0,"margenOperacional":"X%","descripcion":"Descripción MPM según NIIF 18 §48-71 en 2 líneas"},"utilidadNeta":0,"activoTotal":0,"pasivoTotal":0,"patrimonioTotal":0,"activoCorriente":0,"pasivoCorriente":0,"supuestos":"Supuestos NIIF 18 con % concretos","crecimientoIngresos":"X%"},"indicadores":{"2026":{"liquidez":0,"endeudamiento":0,"roe":0,"margenNeto":0},"2027":{"liquidez":0,"endeudamiento":0,"roe":0,"margenNeto":0}},"alertas":["CRÍTICO: alerta con cifras","ALTO: alerta con cifras","MEDIO: alerta con cifras"],"oportunidades":["Oportunidad 1 con impacto estimado USD","Oportunidad 2 con impacto estimado USD","Oportunidad 3 con impacto estimado USD"]}';
       try{
         var text=await window.llamarClaudeIA(prompt);
         text=text.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();

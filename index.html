@@ -816,6 +816,7 @@ body.theme-light .dsh-sc-item.n .dsh-sc-val{color:#1e293b}
       <span id="cnt25">154,904</span> empresas 2025 &nbsp;·&nbsp; <span id="cnt24">148,090</span> empresas 2024
       &nbsp;·&nbsp; Catálogo de cuentas oficial Supercias · Ecuación contable verificada ✓
     </div>
+    <div id="consultas-hint" style="display:none;margin-top:6px;padding:5px 12px;background:rgba(29,158,117,.08);border:1px solid rgba(29,158,117,.2);border-radius:8px;font-size:10.5px;color:rgba(255,255,255,.65);text-align:center"></div>
     <div id="sec-panel" style="display:none">
       <div class="sec-panel-wrap">
         <div class="sec-panel-title" id="sec-title">EMPRESAS DEL MISMO SECTOR</div>
@@ -884,6 +885,10 @@ body.theme-light .dsh-sc-item.n .dsh-sc-val{color:#1e293b}
     josemite27
   </a>
 </footer>
+<!-- DISCLAIMER LEGAL -->
+<div style="background:#050e1a;border-top:1px solid rgba(255,255,255,.06);padding:8px 20px;font-size:9.5px;color:rgba(255,255,255,.3);text-align:center;line-height:1.6">
+  DINAMIT no comercializa información de la Superintendencia de Compañías del Ecuador. Los datos financieros presentados son de acceso público conforme al Art. 36 de la Ley de Compañías. El cobro corresponde exclusivamente al <strong style="color:rgba(255,255,255,.45)">servicio de procesamiento, análisis con inteligencia artificial y generación de informes de valor agregado</strong>, no a los datos en sí mismos.
+</div>
 <!-- MODAL SÓLIDO -->
 <div class="mo-bg" id="mo-bg" onclick="if(event.target===this)closeM()">
   <div class="mo-box" id="mo-box">
@@ -2795,10 +2800,105 @@ function cmpRows(r24raw,r25raw){
     vr(`Margen Neto (607/401)`,g4('c401')>0?g4('c607')/g4('c401'):0,g5('c401')>0?g5('c607')/g5('c401'):0,false);
 }
 
+// ── CONTADOR DE CONSULTAS GRATUITAS ──────────────────────────────────────────
+var _CONSULTAS_GRATIS=2;
+
+function _getContador(){
+  try{ return JSON.parse(localStorage.getItem('dinamit_consultas')||'{}'); }catch(e){return {};}
+}
+function _getRucDesbloqueado(rucN){
+  try{
+    var conf=JSON.parse(localStorage.getItem('dinamit_proy_confirmed')||'{}');
+    var inf=JSON.parse(localStorage.getItem('dinamit_informe_confirmed')||'{}');
+    return conf[rucN]||inf[rucN]||false;
+  }catch(e){return false;}
+}
+function _incrementarContador(rucN){
+  var c=_getContador();
+  // No contar si ya fue consultado antes o si es admin
+  if(_adminLoggedIn||_getRucDesbloqueado(rucN)) return;
+  c.total=(c.total||0)+1;
+  var vistos=c.vistos||{};
+  vistos[rucN]=true;
+  c.vistos=vistos;
+  try{ localStorage.setItem('dinamit_consultas',JSON.stringify(c)); }catch(e){}
+}
+function _consultasUsadas(){
+  var c=_getContador();
+  return c.total||0;
+}
+function _mostrarModalPlanSelector(rucN,nm){
+  // Modal para elegir $1 o $10
+  var overlay=document.createElement('div');
+  overlay.id='plan-selector-overlay';
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px';
+  overlay.innerHTML=`
+    <div style="background:#0C1A2E;border-radius:16px;border:1px solid #1a3a55;max-width:380px;width:100%;padding:24px">
+      <div style="text-align:center;margin-bottom:16px">
+        <div style="font-size:22px;margin-bottom:6px">🔒</div>
+        <div style="font-size:14px;font-weight:800;color:#fff;margin-bottom:4px">Consultas gratuitas agotadas</div>
+        <div style="font-size:11px;color:rgba(255,255,255,.5);line-height:1.5">Has utilizado tus 2 consultas gratuitas.<br>Elige el servicio de análisis para continuar.</div>
+        <div style="margin-top:8px;font-size:11px;font-weight:700;color:#a78bfa">${nm}</div>
+      </div>
+      <div style="font-size:9px;color:rgba(255,255,255,.3);text-align:center;margin-bottom:14px;line-height:1.5">
+        Los datos de Supercias son públicos. El cobro corresponde al servicio de<br>procesamiento, análisis con IA y generación de informes.
+      </div>
+
+      <!-- Plan $1 -->
+      <div onclick="_elegirPlan1('${rucN}')" style="cursor:pointer;background:rgba(29,158,117,.08);border:1px solid rgba(29,158,117,.35);border-radius:12px;padding:14px 16px;margin-bottom:10px;transition:.2s" onmouseover="this.style.background='rgba(29,158,117,.15)'" onmouseout="this.style.background='rgba(29,158,117,.08)'">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <div style="font-size:13px;font-weight:800;color:#4ade80">📄 Informe Ejecutivo</div>
+          <div style="font-size:16px;font-weight:900;color:#4ade80">$1</div>
+        </div>
+        <div style="font-size:10.5px;color:rgba(255,255,255,.6);line-height:1.5">Análisis financiero completo · Ratios e indicadores · Semáforo de salud · Comparativa sectorial · Descargable en PDF</div>
+      </div>
+
+      <!-- Plan $10 -->
+      <div onclick="_elegirPlan10('${rucN}')" style="cursor:pointer;background:rgba(167,139,250,.07);border:1px solid rgba(167,139,250,.35);border-radius:12px;padding:14px 16px;margin-bottom:14px;transition:.2s" onmouseover="this.style.background='rgba(167,139,250,.14)'" onmouseout="this.style.background='rgba(167,139,250,.07)'">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <div style="font-size:13px;font-weight:800;color:#a78bfa">📈 Proyecciones NIIF</div>
+          <div style="font-size:16px;font-weight:900;color:#a78bfa">$10</div>
+        </div>
+        <div style="font-size:10.5px;color:rgba(255,255,255,.6);line-height:1.5">Proyección 2026 (NIC 1) + 2027 (NIIF 18) · Sube tu Excel/PDF · IA genera proyecciones · Histórico Supercias incluido · Por empresa, una sola vez</div>
+      </div>
+
+      <button onclick="document.getElementById('plan-selector-overlay').remove()" style="width:100%;padding:9px;background:transparent;border:1px solid rgba(255,255,255,.15);border-radius:8px;color:rgba(255,255,255,.5);font-size:12px;cursor:pointer">Cancelar</button>
+    </div>`;
+  document.body.appendChild(overlay);
+}
+function _elegirPlan1(rucN){
+  var o=document.getElementById('plan-selector-overlay');
+  if(o) o.remove();
+  // Abrir modal de pago $1 con el row actual
+  if(_moOpenRow) openInformeModal();
+  else { var row=bs(D[year],rucN); if(row){_moOpenRow=row; openInformeModal();} }
+}
+function _elegirPlan10(rucN){
+  var o=document.getElementById('plan-selector-overlay');
+  if(o) o.remove();
+  openProyModal();
+}
+
 // MODAL
 function openMo(type,rucN){
   const row=bs(D[year],rucN);if(!row)return;
   _moOpenRow=row; /* store for download functions */
+
+  // Verificar contador — saltar si admin o RUC ya desbloqueado
+  if(!_adminLoggedIn && !_getRucDesbloqueado(rucN)){
+    var usado=_consultasUsadas();
+    var c=_getContador(); var vistos=c.vistos||{};
+    var esNuevo=!vistos[rucN]; // primera vez viendo este RUC
+    if(esNuevo && usado>=_CONSULTAS_GRATIS){
+      // Mostrar modal de selección de plan
+      const nm=row[F.nm]||rucN;
+      _mostrarModalPlanSelector(rucN,nm);
+      return;
+    }
+    if(esNuevo){ _incrementarContador(rucN); setTimeout(_actualizarHintConsultas,200); }
+  }
+  // Registrar analytics en Firestore (silencioso)
+  _registrarAnalytica(rucN, row);
   const nm=row[F.nm],ruc=row[F.ru],exp=row[F.ex],ci=row[F.ci];
   const c1=rv(row,'c1'),c101=rv(row,'c101'),c102=rv(row,'c102');
   const c10101=rv(row,'c10101'),c10103=rv(row,'c10103'),c10201=rv(row,'c10201');
@@ -3960,6 +4060,90 @@ if ('serviceWorker' in navigator) {
 // ── NAV CSS EXTRA ─────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', loadAll);
+
+// ── HINT CONSULTAS GRATUITAS ───────────────────────────────────────────────
+function _actualizarHintConsultas(){
+  var el=document.getElementById('consultas-hint');
+  if(!el||_adminLoggedIn) return;
+  var usado=_consultasUsadas();
+  var restantes=Math.max(0,_CONSULTAS_GRATIS-usado);
+  if(usado===0){
+    el.style.display='none'; return;
+  }
+  el.style.display='block';
+  if(restantes>0){
+    el.style.borderColor='rgba(29,158,117,.2)';
+    el.style.background='rgba(29,158,117,.08)';
+    el.innerHTML='✅ <strong style="color:#4ade80">'+restantes+' consulta'+(restantes!==1?'s':'')+' gratuita'+(restantes!==1?'s':'')+' disponible'+(restantes!==1?'s':''+'</strong> — Los datos de Supercias son públicos; el cobro es por el servicio de análisis con IA.');
+  } else {
+    el.style.borderColor='rgba(251,191,36,.25)';
+    el.style.background='rgba(251,191,36,.07)';
+    el.innerHTML='⚠ <strong style="color:#fbbf24">Consultas gratuitas agotadas</strong> — La siguiente empresa nueva requiere el servicio de análisis ($1 Informe · $10 Proyecciones NIIF).';
+  }
+}
+setTimeout(_actualizarHintConsultas, 800);
+
+// ── ANALYTICS DE CONSULTAS ────────────────────────────────────────────────
+var _geoCache=null; // cache de geo para no repetir la llamada
+function _getGeo(cb){
+  if(_geoCache){ cb(_geoCache); return; }
+  fetch('https://ipapi.co/json/')
+    .then(function(r){return r.json();})
+    .then(function(d){
+      _geoCache={
+        pais: d.country_name||'',
+        codigoPais: d.country_code||'',
+        ciudad: d.city||'',
+        region: d.region||'',
+        ip: d.ip||''
+      };
+      cb(_geoCache);
+    })
+    .catch(function(){ cb({pais:'',codigoPais:'',ciudad:'',region:'',ip:''}); });
+}
+
+function _registrarAnalytica(rucN, row){
+  if(typeof firebase==='undefined'||!firebase.apps||!firebase.apps.length) return;
+  var nm=(row&&row[F.nm])||'';
+  var ciiu=(row&&row[F.ci])||'';
+  var exp=(row&&row[F.ex])||'';
+  // Extraer provincia desde el expediente (primeras 2 letras = código provincia Supercias)
+  var provSupercias=exp?exp.slice(0,2).toUpperCase():'';
+  var provMap={'GY':'Guayas','PY':'Pichincha','AZ':'Azuay','MT':'Manabí','TN':'Tungurahua',
+    'LJ':'Loja','EI':'El Oro','CB':'Cotopaxi','CH':'Chimborazo','IL':'Imbabura',
+    'BA':'Bolívar','CA':'Cañar','CF':'Carchi','ES':'Esmeraldas','NP':'Napo',
+    'PP':'Pastaza','MR':'Morona Santiago','ZC':'Zamora Chinchipe','GA':'Galápagos',
+    'SU':'Sucumbíos','OL':'Orellana','SD':'Santo Domingo','SC':'Santa Elena'};
+  var provEmpresa=provMap[provSupercias]||provSupercias||'';
+  var ahora=new Date();
+  var fecha=ahora.toISOString().slice(0,10);
+  var hora=ahora.toTimeString().slice(0,8);
+  var diasSemana=['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
+  var diaSemana=diasSemana[ahora.getDay()];
+  var tipo=_adminLoggedIn?'admin':(_getRucDesbloqueado(rucN)?'pagado':'gratis');
+  var consultaN=_consultasUsadas();
+
+  _getGeo(function(geo){
+    var doc={
+      ruc: rucN,
+      empresa: nm,
+      provEmpresa: provEmpresa,
+      ciiu: ciiu,
+      fecha: fecha,
+      hora: hora,
+      diaSemana: diaSemana,
+      timestamp: ahora.getTime(),
+      tipo: tipo,
+      consultaN: consultaN,
+      paisCliente: geo.pais,
+      codigoPais: geo.codigoPais,
+      ciudadCliente: geo.ciudad,
+      regionCliente: geo.region
+    };
+    firebase.firestore().collection('dinamit_analytics').add(doc)
+      .catch(function(e){ console.warn('Analytics error:',e); });
+  });
+}
 </script>
 
 <!-- MODAL DE PAGO -->
@@ -3975,6 +4159,9 @@ document.addEventListener('DOMContentLoaded', loadAll);
 </div>
 
 <script>
+// Alias para abrir modal de pago $1 desde el selector de plan
+function openInformeModal(){ openPayModal('ppq'); }
+
 function openPayModal(reason){
   // reason: 'individual' | 'comparativo' | 'ppq'
   var title = reason==='comparativo'
@@ -4173,6 +4360,16 @@ function saveOrder(order){
 }
 
 function showPaySuccess(order){
+  // Marcar RUC como desbloqueado (plan $1) para no contar en futuras consultas
+  if(order&&order.ruc){
+    try{
+      var inf=JSON.parse(localStorage.getItem('dinamit_informe_confirmed')||'{}');
+      var rucN=String(order.ruc||'').replace(/\D/g,'');
+      if(rucN) inf[rucN]=true;
+      localStorage.setItem('dinamit_informe_confirmed',JSON.stringify(inf));
+      setTimeout(_actualizarHintConsultas,200);
+    }catch(e){}
+  }
   var bg=document.getElementById('pay-mo-bg');
   if(!bg)return;
   bg.innerHTML='<div style="position:relative;background:#0C1A2E;border-radius:16px;padding:32px 24px;max-width:380px;width:90%;margin:auto;text-align:center;border:1px solid #1a2f47">'
@@ -4936,6 +5133,7 @@ function showAdminOrders(){
     '<div style="display:flex;align-items:center;gap:6px;margin-bottom:16px;flex-wrap:wrap">'
     +'<button onclick="showAdminTab(\'stats\')" id="tab-stats" style="background:#1D9E75;color:#0a1e35;border:none;border-radius:7px;padding:7px 14px;font-size:11px;font-weight:800;cursor:pointer;transition:.2s">📊 Dashboard</button>'
     +'<button onclick="showAdminTab(\'orders\')" id="tab-orders" style="background:rgba(255,255,255,.07);color:rgba(255,255,255,.65);border:1px solid #1a2f47;border-radius:7px;padding:7px 14px;font-size:11px;font-weight:600;cursor:pointer">📋 Órdenes</button>'
+    +'<button onclick="showAdminTab(\'analytics\')" id="tab-analytics" style="background:rgba(255,255,255,.07);color:rgba(255,255,255,.65);border:1px solid #1a2f47;border-radius:7px;padding:7px 14px;font-size:11px;font-weight:600;cursor:pointer">🌍 Analytics</button>'
     +'<div style="flex:1"></div>'
     +'<button onclick="adminRefreshAll()" title="Actualizar" style="background:rgba(255,255,255,.07);color:rgba(255,255,255,.5);border:1px solid #1a2f47;border-radius:7px;padding:7px 10px;font-size:12px;cursor:pointer">🔄</button>'
     +'<button onclick="doAdminLogout()" style="background:#2a1515;color:#ff5555;border:1px solid #3a2020;border-radius:7px;padding:7px 10px;font-size:11px;font-weight:600;cursor:pointer">Salir</button>'
@@ -4951,16 +5149,20 @@ function adminRefreshAll(){
 function showAdminTab(tab){
   var tabStats=document.getElementById('tab-stats');
   var tabOrders=document.getElementById('tab-orders');
-  if(!tabStats||!tabOrders) return;
-  tabStats.style.background=tab==='stats'?'#1D9E75':'rgba(255,255,255,.07)';
-  tabStats.style.color=tab==='stats'?'#0a1e35':'rgba(255,255,255,.65)';
-  tabStats.style.border=tab==='stats'?'none':'1px solid #1a2f47';
-  tabOrders.style.background=tab==='orders'?'#1D9E75':'rgba(255,255,255,.07)';
-  tabOrders.style.color=tab==='orders'?'#0a1e35':'rgba(255,255,255,.65)';
-  tabOrders.style.border=tab==='orders'?'none':'1px solid #1a2f47';
+  var tabAnalytics=document.getElementById('tab-analytics');
+  var tabs=[{el:tabStats,id:'stats'},{el:tabOrders,id:'orders'},{el:tabAnalytics,id:'analytics'}];
+  tabs.forEach(function(t){
+    if(!t.el) return;
+    var active=t.id===tab;
+    t.el.style.background=active?'#1D9E75':'rgba(255,255,255,.07)';
+    t.el.style.color=active?'#0a1e35':'rgba(255,255,255,.65)';
+    t.el.style.border=active?'none':'1px solid #1a2f47';
+    t.el.style.fontWeight=active?'800':'600';
+  });
   var el=document.getElementById('admin-tab-content');
   if(!el) return;
   if(tab==='stats') renderAdminDashboard(el, _adminOrders);
+  else if(tab==='analytics') renderAdminAnalytics(el);
   else renderAdminOrders();
 }
 
@@ -5160,6 +5362,210 @@ function renderAdminOrders(){
         +'<button onclick="deleteOrderById(\''+o.id+'\')" title="Eliminar pedido" style="background:transparent;color:rgba(255,80,80,.7);border:1px solid #3a1515;border-radius:6px;padding:6px 10px;font-size:10px;cursor:pointer;margin-left:auto">🗑️ Eliminar</button>'
         +'</div></div>';
     }).join('');
+}
+
+// ── ANALYTICS PANEL ──────────────────────────────────────────────────────
+function renderAdminAnalytics(el){
+  el.innerHTML='<div style="color:rgba(255,255,255,.4);font-size:12px;text-align:center;padding:28px">Cargando analytics...</div>';
+  if(typeof firebase==='undefined'||!firebase.apps||!firebase.apps.length){
+    el.innerHTML='<div style="color:#f87171;font-size:12px;text-align:center;padding:20px">Firebase no disponible</div>'; return;
+  }
+  // Últimos 500 registros ordenados por timestamp desc
+  firebase.firestore().collection('dinamit_analytics')
+    .orderBy('timestamp','desc').limit(500).get()
+    .then(function(snap){
+      var docs=[];
+      snap.forEach(function(d){ docs.push(Object.assign({id:d.id},d.data())); });
+      _buildAnalyticsUI(el,docs);
+    })
+    .catch(function(e){
+      el.innerHTML='<div style="color:#f87171;font-size:12px;padding:20px">Error: '+e.message+'</div>';
+    });
+}
+
+function _buildAnalyticsUI(el, docs){
+  var total=docs.length;
+  var gratis=docs.filter(function(d){return d.tipo==='gratis';}).length;
+  var pagados=docs.filter(function(d){return d.tipo==='pagado';}).length;
+  var adminC=docs.filter(function(d){return d.tipo==='admin';}).length;
+  var conv=total>0?((pagados/total)*100).toFixed(1):0;
+
+  // Agrupar por fecha
+  var porFecha={};
+  docs.forEach(function(d){
+    var f=d.fecha||'Sin fecha';
+    if(!porFecha[f]) porFecha[f]={total:0,gratis:0,pagados:0};
+    porFecha[f].total++;
+    if(d.tipo==='gratis') porFecha[f].gratis++;
+    if(d.tipo==='pagado') porFecha[f].pagados++;
+  });
+  var fechas=Object.keys(porFecha).sort().reverse().slice(0,14);
+
+  // Top empresas
+  var porEmpresa={};
+  docs.forEach(function(d){
+    var k=(d.ruc||'')+'|'+(d.empresa||'Sin nombre');
+    if(!porEmpresa[k]) porEmpresa[k]={empresa:d.empresa||'',ruc:d.ruc||'',n:0,prov:d.provEmpresa||''};
+    porEmpresa[k].n++;
+  });
+  var topEmpresas=Object.values(porEmpresa).sort(function(a,b){return b.n-a.n;}).slice(0,10);
+
+  // Por provincia empresa
+  var porProv={};
+  docs.forEach(function(d){
+    var p=d.provEmpresa||'Sin dato';
+    porProv[p]=(porProv[p]||0)+1;
+  });
+  var topProv=Object.entries(porProv).sort(function(a,b){return b[1]-a[1];}).slice(0,8);
+
+  // Por país cliente
+  var porPais={};
+  docs.forEach(function(d){
+    var p=(d.paisCliente&&d.paisCliente!=='')?d.paisCliente:'Sin dato';
+    porPais[p]=(porPais[p]||0)+1;
+  });
+  var topPais=Object.entries(porPais).sort(function(a,b){return b[1]-a[1];}).slice(0,8);
+
+  // Por día de semana
+  var porDia={'Lunes':0,'Martes':0,'Miércoles':0,'Jueves':0,'Viernes':0,'Sábado':0,'Domingo':0};
+  docs.forEach(function(d){ if(d.diaSemana&&porDia[d.diaSemana]!==undefined) porDia[d.diaSemana]++; });
+
+  // Por CIIU (sector)
+  var porCiiu={};
+  docs.forEach(function(d){
+    var c=d.ciiu?d.ciiu.slice(0,2):'??';
+    porCiiu[c]=(porCiiu[c]||0)+1;
+  });
+  var topCiiu=Object.entries(porCiiu).sort(function(a,b){return b[1]-a[1];}).slice(0,6);
+
+  // Por ciudad cliente
+  var porCiudad={};
+  docs.forEach(function(d){
+    var c=d.ciudadCliente||d.regionCliente||'Sin dato';
+    if(c) porCiudad[c]=(porCiudad[c]||0)+1;
+  });
+  var topCiudad=Object.entries(porCiudad).sort(function(a,b){return b[1]-a[1];}).slice(0,6);
+
+  function barW(v,max){ return Math.max(4,Math.round((v/max)*100))+'%'; }
+  function card(label,val,color){
+    return '<div style="background:#0C1A2E;border:1px solid #1a3a55;border-radius:10px;padding:12px 14px;text-align:center">'
+      +'<div style="font-size:10px;color:rgba(255,255,255,.45);margin-bottom:3px">'+label+'</div>'
+      +'<div style="font-size:22px;font-weight:800;color:'+(color||'#fff')+'">'+val+'</div></div>';
+  }
+  function miniBar(label,val,max,color){
+    return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'
+      +'<div style="width:110px;font-size:10px;color:rgba(255,255,255,.7);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+label+'</div>'
+      +'<div style="flex:1;background:rgba(255,255,255,.07);border-radius:4px;height:12px">'
+      +'<div style="width:'+barW(val,max)+';background:'+color+';border-radius:4px;height:12px"></div></div>'
+      +'<div style="width:28px;text-align:right;font-size:10px;font-weight:700;color:rgba(255,255,255,.8)">'+val+'</div></div>';
+  }
+
+  var maxProv=topProv.length?topProv[0][1]:1;
+  var maxPais=topPais.length?topPais[0][1]:1;
+  var maxEmp=topEmpresas.length?topEmpresas[0].n:1;
+  var maxDia=Math.max.apply(null,Object.values(porDia))||1;
+  var maxCiudad=topCiudad.length?topCiudad[0][1]:1;
+
+  var html='';
+
+  // KPIs
+  html+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px">';
+  html+=card('Total consultas',total,'#60a5fa');
+  html+=card('Gratuitas',gratis,'#4ade80');
+  html+=card('Con pago',pagados,'#a78bfa');
+  html+=card('Conversión',conv+'%','#fbbf24');
+  html+='</div>';
+
+  // Fila 2: por fecha + por día semana
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">';
+
+  // Por fecha
+  html+='<div style="background:#0C1A2E;border:1px solid #1a3a55;border-radius:10px;padding:12px">';
+  html+='<div style="font-size:10.5px;font-weight:700;color:#60a5fa;margin-bottom:8px">📅 Consultas por día</div>';
+  fechas.forEach(function(f){
+    var d=porFecha[f]; var max2=Math.max(1,d.total);
+    html+='<div style="margin-bottom:5px">';
+    html+='<div style="display:flex;justify-content:space-between;font-size:9.5px;color:rgba(255,255,255,.5);margin-bottom:2px"><span>'+f+'</span><span>'+d.total+'</span></div>';
+    html+='<div style="display:flex;gap:2px;height:8px;border-radius:4px;overflow:hidden">';
+    html+='<div style="width:'+Math.round((d.gratis/Math.max(1,d.total))*100)+'%;background:#4ade80;min-width:2px"></div>';
+    html+='<div style="width:'+Math.round((d.pagados/Math.max(1,d.total))*100)+'%;background:#a78bfa"></div>';
+    html+='</div></div>';
+  });
+  html+='<div style="display:flex;gap:10px;margin-top:6px"><span style="font-size:9px;color:#4ade80">■ Gratuitas</span><span style="font-size:9px;color:#a78bfa">■ Pagadas</span></div>';
+  html+='</div>';
+
+  // Por día de semana
+  html+='<div style="background:#0C1A2E;border:1px solid #1a3a55;border-radius:10px;padding:12px">';
+  html+='<div style="font-size:10.5px;font-weight:700;color:#fbbf24;margin-bottom:8px">📆 Por día de semana</div>';
+  ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'].forEach(function(d){
+    html+=miniBar(d,porDia[d]||0,maxDia,'#fbbf24');
+  });
+  html+='</div>';
+  html+='</div>';
+
+  // Fila 3: País cliente + Ciudad cliente
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">';
+
+  html+='<div style="background:#0C1A2E;border:1px solid #1a3a55;border-radius:10px;padding:12px">';
+  html+='<div style="font-size:10.5px;font-weight:700;color:#34d399;margin-bottom:8px">🌍 País del cliente</div>';
+  topPais.forEach(function(p){ html+=miniBar(p[0],p[1],maxPais,'#34d399'); });
+  html+='</div>';
+
+  html+='<div style="background:#0C1A2E;border:1px solid #1a3a55;border-radius:10px;padding:12px">';
+  html+='<div style="font-size:10.5px;font-weight:700;color:#38bdf8;margin-bottom:8px">🏙 Ciudad / Región cliente</div>';
+  topCiudad.forEach(function(c){ html+=miniBar(c[0],c[1],maxCiudad,'#38bdf8'); });
+  html+='</div>';
+
+  html+='</div>';
+
+  // Fila 4: Provincia empresa + Top empresas
+  html+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">';
+
+  html+='<div style="background:#0C1A2E;border:1px solid #1a3a55;border-radius:10px;padding:12px">';
+  html+='<div style="font-size:10.5px;font-weight:700;color:#fb923c;margin-bottom:8px">🗺 Provincia de la empresa</div>';
+  topProv.forEach(function(p){ html+=miniBar(p[0],p[1],maxProv,'#fb923c'); });
+  html+='</div>';
+
+  html+='<div style="background:#0C1A2E;border:1px solid #1a3a55;border-radius:10px;padding:12px">';
+  html+='<div style="font-size:10.5px;font-weight:700;color:#e879f9;margin-bottom:8px">🔎 Empresas más consultadas</div>';
+  topEmpresas.forEach(function(e){
+    html+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">';
+    html+='<div style="flex:1;min-width:0"><div style="font-size:10px;color:rgba(255,255,255,.85);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+e.empresa+'</div>';
+    html+='<div style="font-size:9px;color:rgba(255,255,255,.4)">'+e.ruc+(e.prov?' · '+e.prov:'')+'</div></div>';
+    html+='<div style="font-size:11px;font-weight:800;color:#e879f9;min-width:20px;text-align:right">'+e.n+'</div></div>';
+  });
+  html+='</div>';
+  html+='</div>';
+
+  // Tabla detalle últimas 50
+  html+='<div style="background:#0C1A2E;border:1px solid #1a3a55;border-radius:10px;overflow:hidden;margin-bottom:8px">';
+  html+='<div style="padding:10px 14px;font-size:10.5px;font-weight:700;color:#fff;border-bottom:1px solid #1a3a55">📋 Últimas consultas</div>';
+  html+='<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:600px">';
+  html+='<thead><tr style="background:rgba(255,255,255,.04)">';
+  ['Fecha','Hora','Empresa','RUC','Prov. Empresa','País cliente','Ciudad cliente','Tipo'].forEach(function(h){
+    html+='<th style="padding:7px 10px;font-size:9.5px;color:rgba(255,255,255,.45);text-align:left;white-space:nowrap">'+h+'</th>';
+  });
+  html+='</tr></thead><tbody>';
+  docs.slice(0,50).forEach(function(d,i){
+    var tipoColor=d.tipo==='pagado'?'#a78bfa':d.tipo==='admin'?'#fbbf24':'#4ade80';
+    html+='<tr style="border-bottom:.5px solid rgba(255,255,255,.06);background:'+(i%2===0?'transparent':'rgba(255,255,255,.02)') +'">';
+    html+='<td style="padding:6px 10px;font-size:9.5px;color:rgba(255,255,255,.7)">'+( d.fecha||'-')+'</td>';
+    html+='<td style="padding:6px 10px;font-size:9.5px;color:rgba(255,255,255,.5)">'+( d.hora||'-')+'</td>';
+    html+='<td style="padding:6px 10px;font-size:9.5px;color:rgba(255,255,255,.85);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+(d.empresa||'-')+'</td>';
+    html+='<td style="padding:6px 10px;font-size:9.5px;color:rgba(255,255,255,.5)">'+( d.ruc||'-')+'</td>';
+    html+='<td style="padding:6px 10px;font-size:9.5px;color:rgba(255,255,255,.65)">'+( d.provEmpresa||'-')+'</td>';
+    html+='<td style="padding:6px 10px;font-size:9.5px;color:#34d399">'+( d.paisCliente||'-')+'</td>';
+    html+='<td style="padding:6px 10px;font-size:9.5px;color:#38bdf8">'+( d.ciudadCliente||d.regionCliente||'-')+'</td>';
+    html+='<td style="padding:6px 10px"><span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:4px;background:'+tipoColor+'22;color:'+tipoColor+'">'+d.tipo+'</span></td>';
+    html+='</tr>';
+  });
+  html+='</tbody></table></div></div>';
+
+  if(total===0){
+    html='<div style="text-align:center;padding:40px;color:rgba(255,255,255,.4);font-size:12px">Aún no hay consultas registradas.<br>Se registrarán automáticamente desde la próxima búsqueda.</div>';
+  }
+
+  el.innerHTML=html;
 }
 
 function confirmOrderById(id){

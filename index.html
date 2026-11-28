@@ -1356,9 +1356,9 @@ async function preloadData(){
   ═══════════════════════════════════════════════ */
   function renderProyDashboard(data, id){
     var empresa=data.empresa||'';
-    /* RUC display: Ecuador siempre 13 dígitos — restaurar cero inicial si falta */
+    /* RUC display: Ecuador siempre 13 dígitos — rellenar ceros iniciales si faltan */
     var ruc=String(data.ruc||'').replace(/\s/g,'').replace(/\.\d+$/,'');
-    if(/^\d+$/.test(ruc)&&ruc.length===12) ruc='0'+ruc;
+    if(/^\d+$/.test(ruc)&&ruc.length<13) ruc=ruc.padStart(13,'0');
     var email=data.email||'';
     var año=data.año||'2025';
     var fecha=data.fecha?new Date(data.fecha).toLocaleDateString('es-EC',{day:'2-digit',month:'long',year:'numeric'}):new Date().toLocaleDateString('es-EC',{day:'2-digit',month:'long',year:'numeric'});
@@ -1801,7 +1801,7 @@ function descargaExtPDF(){
   function renderInformeDashboard(data, id){
     var empresa = data.empresa||'';
     var ruc     = String(data.ruc||'').replace(/\s/g,'').replace(/\.\d+$/,'');
-    if(/^\d+$/.test(ruc)&&ruc.length===12) ruc='0'+ruc;
+    if(/^\d+$/.test(ruc)&&ruc.length<13) ruc=ruc.padStart(13,'0');
     var año     = data.año||data.anio||'';
     var fecha   = data.fecha ? new Date(data.fecha).toLocaleDateString('es-EC',{day:'2-digit',month:'long',year:'numeric'}) : new Date().toLocaleDateString('es-EC',{day:'2-digit',month:'long',year:'numeric'});
     var plan    = data.plan||'$1';

@@ -4309,11 +4309,13 @@ function handlePay(){
   if(!r){alert('Error: no hay empresa seleccionada.');return;}
   /* Leer directo del array para evitar que cv() convierta strings a NaN */
   var nm=(Array.isArray(r)?r[3]:rv(r,'nm'))||'Sin nombre';
-  var rucN=(Array.isArray(r)?String(r[1]||''):rv(r,'ru'))||'';
+  var rucRaw1=(Array.isArray(r)?String(r[1]||''):rv(r,'ru'))||'';
+  rucRaw1=rucRaw1.replace(/\s/g,'').replace(/\.\d+$/,''); /* quitar .01 sin quitar cero inicial */
+  var rucN=nR(rucRaw1); /* normalizado para búsqueda */
   var email=document.getElementById('pay-email-input')?document.getElementById('pay-email-input').value.trim():'';
   var method=document.getElementById('pay-method-sel')?document.getElementById('pay-method-sel').value:'transferencia';
   if(!email||!email.includes('@')){alert('Por favor ingresa tu email para recibir el informe.');return;}
-  var order={ruc:rucN,empresa:nm,email:email,method:method,ts:Date.now(),status:'pendiente',year:year};
+  var order={ruc:rucN,rucDisplay:rucRaw1,empresa:nm,email:email,method:method,ts:Date.now(),status:'pendiente',year:year};
   console.log('[DINAMIT] Guardando orden:',order.empresa, order.ruc, order.status);
   saveOrder(order);
 }
@@ -5684,7 +5686,7 @@ function deliverProyAcceso(orderId, order){
   /* Guardar en dinamit_informes con modulo:proyecciones */
   var firestoreData={
     empresa:  order.empresa||order.ruc,
-    ruc:      order.ruc,
+    ruc:      order.rucDisplay||order.ruc,  /* RUC con cero inicial para display */
     email:    order.email,
     año:      String(order.year||new Date().getFullYear()),
     fecha:    new Date().toISOString(),
@@ -5850,7 +5852,7 @@ function deliverInformeAutomatico(orderId, order){
     if(typeof firebase!=='undefined'&&firebase.apps&&firebase.apps.length){
       var firestoreData={
         empresa:  order.empresa,
-        ruc:      order.ruc,
+        ruc:      order.rucDisplay||order.ruc,
         email:    order.email,
         año:      año,
         analisis: analisis,
@@ -6196,7 +6198,31 @@ function handleProyPay(){
   var nm=(Array.isArray(row)?row[3]:rv(row,'nm'))||'';
   var rucN=nR(Array.isArray(row)?String(row[1]||''):rv(row,'ru')||'');
   if(!nm&&rucN){ var r2=bs(D[year],rucN); if(r2) nm=(Array.isArray(r2)?r2[3]:rv(r2,'nm'))||''; }
-  var nm2=nm||rucN;  var order={ruc:rucN,empresa:nm2,email:email,method:'transferencia',ts:Date.now(),status:'pendiente',modulo:'proyecciones',monto:10,year:year};
+  var nm2=nm||rucN;
+  /* RUC para display: conservar cero inicial (13 dígitos Ecuador) */
+  var rucRaw=Array.isArray(row)?String(row[1]||''):rv(row,'ru')||'';
+  rucRaw=rucRaw.replace(/\s/g,'').replace(/\.\d+$/,''); /* quitar .01 pero NO quitar cero inicial */
+  /* Extraer datos Supercias para incluirlos en la orden */
+  var rowAño=bs(D[year],rucN);
+  var rowAnt=null; var yearAnt=String(Number(year)-1);
+  if(D[yearAnt]) rowAnt=bs(D[yearAnt],rucN);
+  var esD=null, esD2=null;
+  if(rowAño){
+    var _r=function(k){return ((rowAño[F[k]]||0)/100);};
+    var _c1=_r('c1'),_c101=_r('c101'),_c102=_r('c102'),_c10101=_r('c10101'),_c10103=_r('c10103'),_c10201=_r('c10201');
+    var _c2=_r('c2'),_c201=_r('c201'),_c202=_r('c202'),_c20103=_r('c20103'),_c20104=_r('c20104'),_c20203=_r('c20203');
+    var _c3s=_r('c3'); var _c3=Math.abs(_c1-_c2-_c3s)<1?_c3s:_c1-_c2;
+    var _c401=_r('c401'),_c501=_r('c501'),_c502=_r('c502'),_gb=_r('gb'),_c600=_r('c600'),_c607=_r('c607');
+    esD={c1:_c1,c101:_c101,c102:_c102,c10101:_c10101,c10103:_c10103,c10201:_c10201,c2:_c2,c201:_c201,c202:_c202,c20103:_c20103,c20104:_c20104,c20203:_c20203,c3:_c3,c401:_c401,c501:_c501,c502:_c502,gb:_gb,c600:_c600,c607:_c607};
+  }
+  if(rowAnt){
+    var _r2=function(k){return ((rowAnt[F[k]]||0)/100);};
+    var _a1=_r2('c1'),_a2=_r2('c2'),_a3s=_r2('c3'); var _a3=Math.abs(_a1-_a2-_a3s)<1?_a3s:_a1-_a2;
+    esD2={c1:_a1,c101:_r2('c101'),c102:_r2('c102'),c2:_a2,c201:_r2('c201'),c3:_a3,c401:_r2('c401'),c501:_r2('c501'),c502:_r2('c502'),gb:_r2('gb'),c607:_r2('c607')};
+  }
+  var order={ruc:rucN,rucDisplay:rucRaw,empresa:nm2,email:email,method:'transferencia',ts:Date.now(),status:'pendiente',modulo:'proyecciones',monto:10,year:year};
+  if(esD)  order.esData=esD;
+  if(esD2) order.esData2=esD2;
   saveProyOrder(order);
 }
 

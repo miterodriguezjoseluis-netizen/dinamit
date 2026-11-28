@@ -1850,6 +1850,18 @@ function descargaExtPDF(){
 }
 <\/script>
 </body></html>`;
+    /* Inyectar textos via DOM desde scope externo (scripts en innerHTML no se ejecutan) */
+    (function(){
+      var eEl=document.getElementById('_emp_lbl');
+      var rEl=document.getElementById('_ruc_lbl');
+      var hEl=document.getElementById('_hist_block');
+      var mEl=document.getElementById('_email_lbl');
+      if(eEl) eEl.textContent=empresa;
+      if(rEl) rEl.textContent='RUC '+ruc+' · Informe '+fecha;
+      if(hEl) hEl.innerHTML=histBlock||'';
+      if(mEl) mEl.textContent=email;
+      document.title='Proyecciones NIIF — '+empresa;
+    })();
   }
 
   function renderInformeError(msg){
@@ -7235,4 +7247,4 @@ window._patchAdminConfirmProy=function(){
 
 </script>
 
-</body></html><!-- v2 -->
+</body></html>
